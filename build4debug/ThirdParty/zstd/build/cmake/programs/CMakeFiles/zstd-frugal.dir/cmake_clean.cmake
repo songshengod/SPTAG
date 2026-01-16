@@ -1,0 +1,17 @@
+file(REMOVE_RECURSE
+  "../../../../../../Debug/zstd-frugal"
+  "../../../../../../Debug/zstd-frugal.pdb"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/fileio.c.o"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/fileio.c.o.d"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/timefn.c.o"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/timefn.c.o.d"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/util.c.o"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/util.c.o.d"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/zstdcli.c.o"
+  "CMakeFiles/zstd-frugal.dir/__/__/__/programs/zstdcli.c.o.d"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C)
+  include(CMakeFiles/zstd-frugal.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../Debug/libDistanceUtils.a CMakeFiles/DistanceUtils.dir/src/Core/Common/DistanceUtils.cpp.o CMakeFiles/DistanceUtils.dir/src/Core/Common/SIMDUtils.cpp.o CMakeFiles/DistanceUtils.dir/src/Core/Common/InstructionUtils.cpp.o
+/usr/bin/ranlib ../../Debug/libDistanceUtils.a
