@@ -217,19 +217,19 @@ namespace SPTAG
 #else
 
         template <typename T, typename R>
-        inline float KmeansAssign(const Dataset<T>& data,
+        inline float    KmeansAssign(const Dataset<T>& data,
             std::vector<SizeType>& indices,
             const SizeType first, const SizeType last, KmeansArgs<T>& args, 
             const bool updateCenters, float lambda) {
             float currDist = 0;
-            SizeType subsize = (last - first - 1) / args._TH + 1;
+            SizeType subsize = (last - first - 1) / args._TH + 1;//均匀分成多份，每个线程处理一段
 
             std::vector<std::thread> mythreads;
             mythreads.reserve(args._TH);
             for (int tid = 0; tid < args._TH; tid++)
             {
                 mythreads.emplace_back([tid, first, last, updateCenters, lambda, subsize, &data, &indices, &args, &currDist]() {
-                    SizeType istart = first + tid * subsize;
+                    SizeType istart = first + tid * subsize;//每个线程都有一份私有Kmeans统计数据。最后统一merge
                     SizeType iend = min(first + (tid + 1) * subsize, last);
                     SizeType *inewCounts = args.newCounts + tid * args._K;
                     float *inewCenters = args.newCenters + tid * args._K * args._RD;
@@ -241,25 +241,25 @@ namespace SPTAG
                     if (args.m_pQuantizer)
                         reconstructVector = (R *)ALIGN_ALLOC(args.m_pQuantizer->ReconstructSize());
 
-                    for (SizeType i = istart; i < iend; i++)
+                    for (SizeType i = istart; i < iend; i++)//给单个向量找最近簇
                     {
                         int clusterid = 0;
                         float smallestDist = MaxDist;
-                        for (int k = 0; k < args._DK; k++)
+                        for (int k = 0; k < args._DK; k++)//遍历所有簇中心
                         {
                             float dist = args.fComputeDistance(data[indices[i]], args.centers + k * args._D, args._D) +
-                                         lambda * args.counts[k];
-                            if (dist > -MaxDist && dist < smallestDist)
+                                         lambda * args.counts[k];//计算样本到中心点的距离，并加上约束项
+                            if (dist > -MaxDist && dist < smallestDist)//记录综合代价最小的簇
                             {
                                 clusterid = k;
                                 smallestDist = dist;
                             }
                         }
-                        args.label[i] = clusterid;
-                        inewCounts[clusterid]++;
+                        args.label[i] = clusterid;//把这个样本分配给代价最小的簇
+                        inewCounts[clusterid]++;//该簇的计数加一
                         iweightedCounts[clusterid] += smallestDist;
                         idist += smallestDist;
-                        if (updateCenters)
+                        if (updateCenters)//更新中心点
                         {
                             if (args.m_pQuantizer)
                             {
@@ -272,9 +272,9 @@ namespace SPTAG
                             }
                             float *center = inewCenters + clusterid * args._RD;
                             for (DimensionType j = 0; j < args._RD; j++)
-                                center[j] += reconstructVector[j];
+                                center[j] += reconstructVector[j];//累加簇中心，用于下一轮refinecenter
 
-                            if (smallestDist > iclusterDist[clusterid])
+                            if (smallestDist > iclusterDist[clusterid])//记录该簇中最远的样本
                             {
                                 iclusterDist[clusterid] = smallestDist;
                                 iclusterIdx[clusterid] = indices[i];
@@ -299,7 +299,7 @@ namespace SPTAG
                 t.join();
             }
             mythreads.clear();
-            for (int i = 1; i < args._TH; i++) {
+            for (int i = 1; i < args._TH; i++) {//合并统计结果
                 for (int k = 0; k < args._DK; k++) {
                     args.newCounts[k] += args.newCounts[i * args._K + k];
                     args.newWeightedCounts[k] += args.newWeightedCounts[i * args._K + k];
@@ -365,7 +365,7 @@ namespace SPTAG
             std::vector<SizeType>& indices, const SizeType first, const SizeType last,
             KmeansArgs<T>& args, int samples = 1000, float lambdaFactor = 100.0f, bool debug = false, IAbortOperation* abort = nullptr) {
 
-            float adjustedLambda = InitCenters<T, R>(data, indices, first, last, args, samples, 3);
+            float adjustedLambda = InitCenters<T, R>(data, indices, first, last, args, samples, 3);//根据数据分布动态调整的lambda
             if (abort && abort->ShouldAbort()) return 0;
 
             std::mt19937 rg;
@@ -374,13 +374,13 @@ namespace SPTAG
             int noImprovement = 0;
             float originalLambda = COMMON::Utils::GetBase<T>() * COMMON::Utils::GetBase<T>() / lambdaFactor / (batchEnd - first);
             for (int iter = 0; iter < 100; iter++) {
-                std::memcpy(args.centers, args.newTCenters, sizeof(T)*args._K*args._D);
+                std::memcpy(args.centers, args.newTCenters, sizeof(T)*args._K*args._D);//更新中心
                 std::shuffle(indices.begin() + first, indices.begin() + last, rg);
 
                 args.ClearCenters();
                 args.ClearCounts();
                 args.ClearDists(-MaxDist);
-                currDist = KmeansAssign<T, R>(data, indices, first, batchEnd, args, true, min(adjustedLambda, originalLambda));
+                currDist = KmeansAssign<T, R>(data, indices, first, batchEnd, args, true, min(adjustedLambda, originalLambda));//分层多约束平衡聚类算法:对每个样本，算到每个中心的距离，加上约束项，选最小的簇，累加
                 std::memcpy(args.counts, args.newCounts, sizeof(SizeType) * args._K);
 
                 if (currDist < minClusterDist) {
@@ -401,7 +401,7 @@ namespace SPTAG
                 }
                 */
 
-                currDiff = RefineCenters<T, R>(data, args);
+                currDiff = RefineCenters<T, R>(data, args);//中心变化幅度
                 //if (debug) SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "iter %d dist:%f diff:%f\n", iter, currDist, currDiff);
 
                 if (abort && abort->ShouldAbort()) return 0;
@@ -411,13 +411,13 @@ namespace SPTAG
             args.ClearCounts();
             args.ClearDists(MaxDist);
             currDist = KmeansAssign<T, R>(data, indices, first, last, args, false, 0);
-            for (int k = 0; k < args._DK; k++) {
+            for (int k = 0; k < args._DK; k++) {//用真实向量代替中心
                 if (args.clusterIdx[k] != -1) std::memcpy(args.centers + k * args._D, data[args.clusterIdx[k]], sizeof(T) * args._D);
             }
 
             args.ClearCounts();
             args.ClearDists(MaxDist);
-            currDist = KmeansAssign<T, R>(data, indices, first, last, args, false, 0);
+            currDist = KmeansAssign<T, R>(data, indices, first, last, args, false, 0);//再跑一次精确分配
             std::memcpy(args.counts, args.newCounts, sizeof(SizeType) * args._K);
 
             SizeType maxCount = 0, minCount = (std::numeric_limits<SizeType>::max)(), availableClusters = 0;
@@ -507,7 +507,7 @@ break;
             }
             else
             {
-                TryClustering<T, T>(data, indices, first, last, args, samples, lambdaFactor, debug, abort);
+                TryClustering<T, T>(data, indices, first, last, args, samples, lambdaFactor, debug, abort);//切分簇
             }
 
             if (abort && abort->ShouldAbort()) return 1;
@@ -580,12 +580,12 @@ break;
                 std::stack<BKTStackItem> ss;
 
                 std::vector<SizeType> localindices;
-                if (indices == nullptr) {
+                if (indices == nullptr) {//没索引
                     localindices.resize(data.R());
-                    for (SizeType i = 0; i < localindices.size(); i++) localindices[i] = i;
+                    for (SizeType i = 0; i < localindices.size(); i++) localindices[i] = i;//BKT是基于全量ID构建
                 }
                 else {
-                    localindices.assign(indices->begin(), indices->end());
+                    localindices.assign(indices->begin(), indices->end());//基于传入的ID子集构建的
                 }
                 KmeansArgs<T> args(m_iBKTKmeansK, data.C(), (SizeType)localindices.size(), numOfThreads, distMethod, m_pQuantizer);
 
@@ -597,11 +597,11 @@ break;
                 {
                     std::shuffle(localindices.begin(), localindices.end(), rg);
 
-                    m_pTreeStart.push_back((SizeType)m_pTreeRoots.size());
-                    m_pTreeRoots.emplace_back((SizeType)localindices.size());
+                    m_pTreeStart.push_back((SizeType)m_pTreeRoots.size());//记录这棵树的起点
+                    m_pTreeRoots.emplace_back((SizeType)localindices.size());//创建根节点
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start to build BKTree %d\n", i + 1);
 
-                    ss.push(BKTStackItem(m_pTreeStart[i], 0, (SizeType)localindices.size(), true));
+                    ss.push(BKTStackItem(m_pTreeStart[i], 0, (SizeType)localindices.size(), true));//压栈，从一段区间开始
                     while (!ss.empty()) {
                         if (abort && abort->ShouldAbort())
                         {
@@ -612,8 +612,8 @@ break;
                         m_pTreeRoots[item.index].childStart = (SizeType)m_pTreeRoots.size();
                         if (item.last - item.first <= m_iBKTLeafSize) {
                             for (SizeType j = item.first; j < item.last; j++) {
-                                SizeType cid = (reverseIndices == nullptr)? localindices[j]: reverseIndices->at(localindices[j]);
-                                m_pTreeRoots.emplace_back(cid);
+                                SizeType cid = (reverseIndices == nullptr)? localindices[j]: reverseIndices->at(localindices[j]);//cid是真实向量ID。1->lo[j]是当前区间的向量ID，2->lo里面是索引在子集的位置，需要映射会原始的ID
+                                m_pTreeRoots.emplace_back(cid);//把每个向量作为叶子结点加入树
                             }
                         }
                         else { // clustering the data into BKTKmeansK clusters
@@ -623,31 +623,31 @@ break;
                             }
 
                             int numClusters = KmeansClustering(data, localindices, item.first, item.last, args, m_iSamples, m_fBalanceFactor, item.debug, abort);
-                            if (numClusters <= 1) {
+                            if (numClusters <= 1) {//所有点在一类
                                 SizeType end = min(item.last + 1, (SizeType)localindices.size());
-                                std::sort(localindices.begin() + item.first, localindices.begin() + end);
-                                m_pTreeRoots[item.index].centerid = (reverseIndices == nullptr) ? localindices[item.first] : reverseIndices->at(localindices[item.first]);
-                                m_pTreeRoots[item.index].childStart = -m_pTreeRoots[item.index].childStart;
+                                std::sort(localindices.begin() + item.first, localindices.begin() + end);//对当前区间排序
+                                m_pTreeRoots[item.index].centerid = (reverseIndices == nullptr) ? localindices[item.first] : reverseIndices->at(localindices[item.first]);//选当前区间第一个向量作为中心
+                                m_pTreeRoots[item.index].childStart = -m_pTreeRoots[item.index].childStart;//<0表示这个节点不是正常分裂节点。
                                 for (SizeType j = item.first + 1; j < end; j++) {
                                     SizeType cid = (reverseIndices == nullptr) ? localindices[j] : reverseIndices->at(localindices[j]);
                                     m_pTreeRoots.emplace_back(cid);
-                                    m_pSampleCenterMap[cid] = m_pTreeRoots[item.index].centerid;
+                                    m_pSampleCenterMap[cid] = m_pTreeRoots[item.index].centerid;//样本向量cid属于中心
                                 }
-                                m_pSampleCenterMap[-1 - m_pTreeRoots[item.index].centerid] = item.index;
+                                m_pSampleCenterMap[-1 - m_pTreeRoots[item.index].centerid] = item.index;//中心作为key,树节点作为value，给定一个中心向量ID，能找到他在BKT树中的节点位置
                             }
                             else {
                                 SizeType maxCount = 0;
                                 for (int k = 0; k < m_iBKTKmeansK; k++) if (args.counts[k] > maxCount) maxCount = args.counts[k];
-                                for (int k = 0; k < m_iBKTKmeansK; k++) {
+                                for (int k = 0; k < m_iBKTKmeansK; k++) {//遍历每一个簇
                                     if (args.counts[k] == 0) continue;
                                     SizeType cid = (reverseIndices == nullptr) ? localindices[item.first + args.counts[k] - 1] : reverseIndices->at(localindices[item.first + args.counts[k] - 1]);
                                     m_pTreeRoots.emplace_back(cid);
                                     if (args.counts[k] > 1) ss.push(BKTStackItem((SizeType)(m_pTreeRoots.size() - 1), item.first, item.first + args.counts[k] - 1, item.debug && (args.counts[k] == maxCount)));
-                                    item.first += args.counts[k];
+                                    item.first += args.counts[k];//移动区间指针，下一个簇从新的first开始
                                 }
                             }
                         }
-                        m_pTreeRoots[item.index].childEnd = (SizeType)m_pTreeRoots.size();
+                        m_pTreeRoots[item.index].childEnd = (SizeType)m_pTreeRoots.size();//子节点不再有更多孩子，子树构建完成的标志
                     }
                     m_pTreeRoots.emplace_back(-1);
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "%d BKTree built, %zu %zu\n", i + 1, m_pTreeRoots.size() - m_pTreeStart[i], localindices.size());

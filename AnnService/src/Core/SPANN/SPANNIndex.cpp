@@ -946,7 +946,7 @@ bool Index<T>::SelectHeadInternal(std::shared_ptr<Helper::VectorSetReader> &p_re
             m_options.m_iSelectHeadNumberOfThreads);
 
         bkt->BuildTrees<InternalDataType>(data, m_options.m_distCalcMethod, m_options.m_iSelectHeadNumberOfThreads,
-                                          nullptr, nullptr, true);
+                                          nullptr, nullptr, true);//构建树
         auto t2 = std::chrono::high_resolution_clock::now();
         double elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(t2 - t1).count();
         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "End invoking BuildTrees.\n");
