@@ -879,12 +879,12 @@ namespace SPTAG
                 SPTAGLIB_LOG(SPTAG::Helper::LogLevel::LL_Info, "Time to perform posting cut:%.2lf sec.\n", ((double)std::chrono::duration_cast<std::chrono::seconds>(t4 - t3).count()) + ((double)std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count()) / 1000);
 
                 // number of posting lists per file
-                size_t postingFileSize = (postingListSize.size() + p_opt.m_ssdIndexFileNum - 1) / p_opt.m_ssdIndexFileNum;
-                std::vector<size_t> selectionsBatchOffset(p_opt.m_ssdIndexFileNum + 1, 0);
+                size_t postingFileSize = (postingListSize.size() + p_opt.m_ssdIndexFileNum - 1) / p_opt.m_ssdIndexFileNum;//Head总数/要生成几个SSD索引文件=每个SSD文件负责多少个Head（向上取整）
+                std::vector<size_t> selectionsBatchOffset(p_opt.m_ssdIndexFileNum + 1, 0);//第i个SSD索引文件在Selection中对应的起始位置
                 for (int i = 0; i < p_opt.m_ssdIndexFileNum; i++) {
                     size_t curPostingListEnd = min(postingListSize.size(), (i + 1) * postingFileSize);
                     selectionsBatchOffset[i + 1] = std::lower_bound(selections.m_selections.begin(), selections.m_selections.end(), (SizeType)curPostingListEnd, Selection::g_edgeComparer) - selections.m_selections.begin();
-                }
+                }//前i个SSD文件一共用了多少条记录，Selectionbatchoffset=[0,100,210,330,...]
 
                 if (p_opt.m_ssdIndexFileNum > 1)
                 {
@@ -904,7 +904,7 @@ namespace SPTAG
                     // postingListSize: number of vectors in the posting list, type vector<int>
                     std::vector<int> curPostingListSizes(
                         postingListSize.begin() + curPostingListOffSet,
-                        postingListSize.begin() + curPostingListEnd);
+                        postingListSize.begin() + curPostingListEnd);//当前SSDIndex文件中，每个Head的postinglist有多少个向量
 
                     std::vector<size_t> curPostingListBytes(curPostingListSizes.size());
                     
@@ -1017,7 +1017,7 @@ namespace SPTAG
                     else {
                         for (int j = 0; j < curPostingListSizes.size(); j++)
                         {
-                            curPostingListBytes[j] = curPostingListSizes[j] * vectorInfoSize;
+                            curPostingListBytes[j] = curPostingListSizes[j] * vectorInfoSize;//第j个Head的postinglist有多少个向量*一个向量占用的字节数=第j个Head的postinglist总共占多少字节
                         }
                     }
 
@@ -1346,23 +1346,23 @@ namespace SPTAG
                 const std::vector<size_t>& p_postingListBytes,
                 std::unique_ptr<int[]>& p_postPageNum,
                 std::unique_ptr<std::uint16_t[]>& p_postPageOffset,
-                std::vector<int>& p_postingOrderInIndex)
+                std::vector<int>& p_postingOrderInIndex)//postinglist写入SSD的物理顺序
             {
                 p_postPageNum.reset(new int[p_postingListBytes.size()]);
                 p_postPageOffset.reset(new std::uint16_t[p_postingListBytes.size()]);
 
                 struct PageModWithID
                 {
-                    int id;
+                    int id;//第几个postinglist
 
-                    std::uint16_t rest;
+                    std::uint16_t rest;//这个postinglist的多余
                 };
 
                 struct PageModeWithIDCmp
                 {
                     bool operator()(const PageModWithID& a, const PageModWithID& b) const
                     {
-                        return a.rest == b.rest ? a.id < b.id : a.rest > b.rest;
+                        return a.rest == b.rest ? a.id < b.id : a.rest > b.rest;//多余相同，用ID排序
                     }
                 };
 
@@ -1372,7 +1372,7 @@ namespace SPTAG
                 p_postingOrderInIndex.reserve(p_postingListBytes.size());
 
                 PageModWithID listInfo;
-                for (size_t i = 0; i < p_postingListBytes.size(); ++i)
+                for (size_t i = 0; i < p_postingListBytes.size(); ++i)//遍历每一个postinglist
                 {
                     if (p_postingListBytes[i] == 0)
                     {
@@ -1382,44 +1382,44 @@ namespace SPTAG
                     listInfo.id = static_cast<int>(i);
                     listInfo.rest = static_cast<std::uint16_t>(p_postingListBytes[i] % PageSize);
 
-                    listRestSize.insert(listInfo);
+                    listRestSize.insert(listInfo);//所有postinglist多余进入集合
                 }
 
                 listInfo.id = -1;
 
                 int currPageNum = 0;
-                std::uint16_t currOffset = 0;
+                std::uint16_t currOffset = 0;//当前Page已经写了多少字节
 
                 while (!listRestSize.empty())
                 {
-                    listInfo.rest = PageSize - currOffset;
-                    auto iter = listRestSize.lower_bound(listInfo); // avoid page-crossing
+                    listInfo.rest = PageSize - currOffset;//当前Page还剩多少空间，用它作为能不能放进去的判断条件
+                    auto iter = listRestSize.lower_bound(listInfo); // avoid page-crossing，在listRestSize中找一个Rest小于当前剩余空间的。
                     if (iter == listRestSize.end() || (listInfo.rest != PageSize && iter->rest == 0))
                     {
                         ++currPageNum;
                         currOffset = 0;
                     }
-                    else
+                    else//找到了一个可以放进当前Page的多余
                     {
-                        p_postPageNum[iter->id] = currPageNum;
-                        p_postPageOffset[iter->id] = currOffset;
+                        p_postPageNum[iter->id] = currPageNum;//记录第ID个postinglist从第currpagenum页开始
+                        p_postPageOffset[iter->id] = currOffset;//记录在该Page内的起始字节偏移
 
-                        p_postingOrderInIndex.push_back(iter->id);
+                        p_postingOrderInIndex.push_back(iter->id);//记录这个postinglist的物理写入顺序
 
-                        currOffset += iter->rest;
+                        currOffset += iter->rest;//把这个postinglist的多余的放进Page
                         if (currOffset > PageSize)
                         {
                             SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Crossing extra pages\n");
                             throw std::runtime_error("Read too many pages");
                         }
 
-                        if (currOffset == PageSize)
+                        if (currOffset == PageSize)//如果刚好填满一页，直接换到下一页
                         {
                             ++currPageNum;
                             currOffset = 0;
                         }
 
-                        currPageNum += static_cast<int>(p_postingListBytes[iter->id] / PageSize);
+                        currPageNum += static_cast<int>(p_postingListBytes[iter->id] / PageSize);//跳过这个postinglist的完整页部分
 
                         listRestSize.erase(iter);
                     }
@@ -1481,7 +1481,7 @@ namespace SPTAG
                 std::unique_ptr<char[]> paddingVals(new char[PageSize]);
                 memset(paddingVals.get(), 0, sizeof(char) * PageSize);
                 // paddingSize: bytes left in the last page
-                std::uint64_t paddingSize = PageSize - (listOffset % PageSize);
+                std::uint64_t paddingSize = PageSize - (listOffset % PageSize);//postinglist内容一定从整个Page开始。
                 if (paddingSize == PageSize)
                 {
                     paddingSize = 0;
