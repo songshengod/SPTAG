@@ -1198,11 +1198,11 @@ void VectorIndex::ApproximateRNG(std::shared_ptr<VectorSet> &fullVectors, std::u
                 }
                 resultSet.Reset();
 
-                SearchIndex(resultSet);
+                SearchIndex(resultSet);//寻找与当前向量最接近的candidatenum个候选邻居
 
                 size_t selectionOffset = static_cast<size_t>(fullID) * replicaCount;
 
-                BasicResult *queryResults = resultSet.GetResults();
+                BasicResult *queryResults = resultSet.GetResults();//获取搜索到的候选集
                 int currReplicaCount = 0;
                 for (int i = 0; i < candidateNum && currReplicaCount < replicaCount; ++i)
                 {

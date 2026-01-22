@@ -643,7 +643,7 @@ namespace SPTAG
             }
 
             bool BuildIndex(std::shared_ptr<Helper::VectorSetReader>& p_reader, std::shared_ptr<VectorIndex> p_headIndex, Options& p_opt, COMMON::VersionLabel& p_versionMap, COMMON::Dataset<std::uint64_t>& p_vectorTranslateMap, SizeType upperBound = -1) {
-                std::string outputFile = p_opt.m_indexDirectory + FolderSep + p_opt.m_ssdIndex;
+                std::string outputFile = p_opt.m_indexDirectory + FolderSep + p_opt.m_ssdIndex;//设置输出路径
                 if (outputFile.empty())
                 {
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Output file can't be empty!\n");
@@ -661,7 +661,7 @@ namespace SPTAG
 
                 for (int i = 0; i < p_vectorTranslateMap.R(); i++)
                 {
-                    headVectorIDS[static_cast<SizeType>(*(p_vectorTranslateMap[i]))] = i;
+                    headVectorIDS[static_cast<SizeType>(*(p_vectorTranslateMap[i]))] = i;//headvectorids存储了哪些向量是头结点。
                 }
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Loaded %u Vector IDs\n", static_cast<uint32_t>(headVectorIDS.size()));
 
@@ -669,21 +669,22 @@ namespace SPTAG
                 size_t vectorInfoSize = 0;
                 {
                     auto fullVectors = p_reader->GetVectorSet();
-                    fullCount = fullVectors->Count();
-                    vectorInfoSize = fullVectors->PerVectorDataSize() + sizeof(int);
+                    fullCount = fullVectors->Count();//获取向量总数
+                    vectorInfoSize = fullVectors->PerVectorDataSize() + sizeof(int);//一个向量的大小
                 }
                 if (upperBound > 0) fullCount = upperBound;
 
                 p_versionMap.Initialize(fullCount, p_headIndex->m_iDataBlockSize, p_headIndex->m_iDataCapacity);
 
-                Selection selections(static_cast<size_t>(fullCount) * p_opt.m_replicaCount, p_opt.m_tmpdir);
+                Selection selections(static_cast<size_t>(fullCount) * p_opt.m_replicaCount, p_opt.m_tmpdir);//初始化Selection数组：1B*8个副本==80亿规模的数组
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Full vector count:%d Edge bytes:%llu selection size:%zu, capacity size:%zu\n", fullCount, sizeof(Edge), selections.m_selections.size(), selections.m_selections.capacity());
-                std::vector<std::atomic_int> replicaCount(fullCount);
-                std::vector<std::atomic_int> postingListSize(p_headIndex->GetNumSamples());
+                std::vector<std::atomic_int> replicaCount(fullCount);//记录每个点被分配了多少次
+                std::vector<std::atomic_int> postingListSize(p_headIndex->GetNumSamples());//记录每个中心点下有多少个向量
                 for (auto& pls : postingListSize) pls = 0;
                 std::unordered_set<SizeType> emptySet;
-                SizeType batchSize = (fullCount + p_opt.m_batches - 1) / p_opt.m_batches;
+                SizeType batchSize = (fullCount + p_opt.m_batches - 1) / p_opt.m_batches;//计算每一批处理多少条向量
 
+                
                 auto t1 = std::chrono::high_resolution_clock::now();
                 if (p_opt.m_batches > 1)
                 {
@@ -699,7 +700,7 @@ namespace SPTAG
                     for (int i = 0; i < p_opt.m_batches; i++) {
                         SizeType start = i * batchSize;
                         SizeType end = min(start + batchSize, fullCount);
-                        auto fullVectors = p_reader->GetVectorSet(start, end);
+                        auto fullVectors = p_reader->GetVectorSet(start, end);//获取当前批次
                         if (p_opt.m_distCalcMethod == DistCalcMethod::Cosine && !p_reader->IsNormalized() && !p_headIndex->m_pQuantizer) fullVectors->Normalize(p_opt.m_iSSDNumberOfThreads);
 
                         if (p_opt.m_batches > 1) {
@@ -725,7 +726,7 @@ namespace SPTAG
                         }
 
                         float acc = 0;
-                        for (int j = 0; j < sampleNum; j++)
+                        for (int j = 0; j < sampleNum; j++)//随机抽取样本，看看内存里的HeadIndex搜索的向量准不准。
                         {
                             COMMON::Utils::atomic_float_add(&acc, COMMON::TruthSet::CalculateRecall(p_headIndex.get(), fullVectors->GetVector(samples[j]), candidateNum));
                         }
@@ -738,14 +739,14 @@ namespace SPTAG
                         for (SizeType j = start; j < end; j++) {
                             replicaCount[j] = 0;
                             size_t vecOffset = j * (size_t)p_opt.m_replicaCount;
-                            if (headVectorIDS.count(j) == 0) {
+                            if (headVectorIDS.count(j) == 0) {//向量是普通向量
                                 for (int resNum = 0; resNum < p_opt.m_replicaCount && selections[vecOffset + resNum].node != INT_MAX; resNum++) {
-                                    ++postingListSize[selections[vecOffset + resNum].node];
-                                    selections[vecOffset + resNum].tonode = j;
+                                    ++postingListSize[selections[vecOffset + resNum].node];//postinglistsize是一个计数器数组，该HeadID的数量加一
+                                    selections[vecOffset + resNum].tonode = j;//向量ID对应原始ID，记录目标向量的索引ID
                                     ++replicaCount[j];
                                 }
                             } else if (!p_opt.m_excludehead) {
-                                selections[vecOffset].node = headVectorIDS[j];
+                                selections[vecOffset].node = headVectorIDS[j];//当前向量是Head节点
                                 selections[vecOffset].tonode = j;
                                 ++postingListSize[selections[vecOffset].node];
                                 ++replicaCount[j];
@@ -773,7 +774,7 @@ namespace SPTAG
                 }
 
                 // Sort results either in CPU or GPU
-                VectorIndex::SortSelections(&selections.m_selections);
+                VectorIndex::SortSelections(&selections.m_selections);//按照HeadID来排序
 
                 auto t3 = std::chrono::high_resolution_clock::now();
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Time to sort selections:%.2lf sec.\n", ((double)std::chrono::duration_cast<std::chrono::seconds>(t3 - t2).count()) + ((double)std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()) / 1000);
@@ -790,11 +791,11 @@ namespace SPTAG
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Posting size limit: %d\n", postingSizeLimit);
 
                 {
-                    std::vector<int> replicaCountDist(p_opt.m_replicaCount + 1, 0);
-                    for (int i = 0; i < replicaCount.size(); ++i)
+                    std::vector<int> replicaCountDist(p_opt.m_replicaCount + 1, 0);//创建分布数组
+                    for (int i = 0; i < replicaCount.size(); ++i)//replicaCount.size()为全量向量
                     {
-                        if (headVectorIDS.count(i) > 0) continue;
-                        ++replicaCountDist[replicaCount[i]];
+                        if (headVectorIDS.count(i) > 0) continue;//排除Head节点，只统计原始数据节点
+                        ++replicaCountDist[replicaCount[i]];//replicacount[i]:i向量有多少副本，
                     }
 
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Before Posting Cut:\n");
@@ -904,9 +905,9 @@ namespace SPTAG
                     // postingListSize: number of vectors in the posting list, type vector<int>
                     std::vector<int> curPostingListSizes(
                         postingListSize.begin() + curPostingListOffSet,
-                        postingListSize.begin() + curPostingListEnd);//当前SSDIndex文件中，每个Head的postinglist有多少个向量
+                        postingListSize.begin() + curPostingListEnd);//当前SSD文件的postinglist的大小
 
-                    std::vector<size_t> curPostingListBytes(curPostingListSizes.size());
+                    std::vector<size_t> curPostingListBytes(curPostingListSizes.size());//准备用来计算每个postinglist在磁盘上占用的实际字节数
                     
                     if (p_opt.m_ssdIndexFileNum > 1)
                     {
@@ -1448,7 +1449,7 @@ namespace SPTAG
 
                 auto t1 = std::chrono::high_resolution_clock::now();
 
-                auto ptr = SPTAG::f_createIO();
+                auto ptr = SPTAG::f_createIO();//创建io句柄
                 int retry = 3;
                 // open file 
                 while (retry > 0 && (ptr == nullptr || !ptr->Initialize(p_outputFile.c_str(), std::ios::binary | std::ios::out)))
@@ -1462,9 +1463,9 @@ namespace SPTAG
                     throw std::runtime_error("Failed to open file for SSD index save");
                 }
                 // meta size of global info
-                std::uint64_t listOffset = sizeof(int) * 4;
+                std::uint64_t listOffset = sizeof(int) * 4;//基础的全局信息
                 // meta size of the posting lists
-                listOffset += (sizeof(int) + sizeof(std::uint16_t) + sizeof(int) + sizeof(std::uint16_t)) * p_postingListSizes.size();
+                listOffset += (sizeof(int) + sizeof(std::uint16_t) + sizeof(int) + sizeof(std::uint16_t)) * p_postingListSizes.size();//加上每个pl的索引信息，向量数，页号，页偏移，
                 // write listTotalBytes only when enabled data compression
                 if (p_enableDataCompression)
                 {
@@ -1479,16 +1480,16 @@ namespace SPTAG
                 }
 
                 std::unique_ptr<char[]> paddingVals(new char[PageSize]);
-                memset(paddingVals.get(), 0, sizeof(char) * PageSize);
+                memset(paddingVals.get(), 0, sizeof(char) * PageSize);//准备一个4KB的全0 缓冲区用于填充
                 // paddingSize: bytes left in the last page
-                std::uint64_t paddingSize = PageSize - (listOffset % PageSize);//postinglist内容一定从整个Page开始。
+                std::uint64_t paddingSize = PageSize - (listOffset % PageSize);//postinglist内容一定从整个Page开始。 10-（10%4）=2
                 if (paddingSize == PageSize)
                 {
                     paddingSize = 0;
                 }
                 else
                 {
-                    listOffset += paddingSize;
+                    listOffset += paddingSize;//更新偏移量，将填充空间计入，10+2=12，目录用了一半页，还有一半用0填充，正文新起一页开始。
                 }
 
                 // Number of posting lists
@@ -1513,7 +1514,7 @@ namespace SPTAG
                 }
 
                 // Page offset of list content section
-                i32Val = static_cast<int>(listOffset / PageSize);
+                i32Val = static_cast<int>(listOffset / PageSize);//12/4=3,从第4页开始都是正文
                 if (ptr->WriteBinary(sizeof(i32Val), reinterpret_cast<char*>(&i32Val)) != sizeof(i32Val)) {
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write SSDIndex File!");
                     throw std::runtime_error("Failed to write SSDIndex File");
@@ -1522,11 +1523,11 @@ namespace SPTAG
                 // Meta of each posting list
                 for (int i = 0; i < p_postingListSizes.size(); ++i)
                 {
-                    size_t postingListByte = 0;
+                    size_t postingListByte = 0;//该列表的实际占用字节数
                     int pageNum = 0; // starting page number
-                    std::uint16_t pageOffset = 0;
-                    int listEleCount = 0;
-                    std::uint16_t listPageCount = 0;
+                    std::uint16_t pageOffset = 0;//该列表在起始页内的字节偏移
+                    int listEleCount = 0;//列表里一共有多少个向量
+                    std::uint16_t listPageCount = 0;//这个列表一共跨越了多少个Page
 
                     if (p_postingListSizes[i] > 0)
                     {
@@ -1546,22 +1547,22 @@ namespace SPTAG
                         throw std::runtime_error("Failed to write SSDIndex File");
                     }
                     // Page number of the posting list
-                    if (ptr->WriteBinary(sizeof(pageNum), reinterpret_cast<char*>(&pageNum)) != sizeof(pageNum)) {
+                    if (ptr->WriteBinary(sizeof(pageNum), reinterpret_cast<char*>(&pageNum)) != sizeof(pageNum)) {//写入页面编号
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write SSDIndex File!");
                         throw std::runtime_error("Failed to write SSDIndex File");
                     }
                     // Page offset
-                    if (ptr->WriteBinary(sizeof(pageOffset), reinterpret_cast<char*>(&pageOffset)) != sizeof(pageOffset)) {
+                    if (ptr->WriteBinary(sizeof(pageOffset), reinterpret_cast<char*>(&pageOffset)) != sizeof(pageOffset)) {//写入页面偏移
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write SSDIndex File!");
                         throw std::runtime_error("Failed to write SSDIndex File");
                     }
                     // Number of vectors in the posting list
-                    if (ptr->WriteBinary(sizeof(listEleCount), reinterpret_cast<char*>(&listEleCount)) != sizeof(listEleCount)) {
+                    if (ptr->WriteBinary(sizeof(listEleCount), reinterpret_cast<char*>(&listEleCount)) != sizeof(listEleCount)) {//写入该pl的向量数
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write SSDIndex File!");
                         throw std::runtime_error("Failed to write SSDIndex File");
                     }
                     // Page count of the posting list
-                    if (ptr->WriteBinary(sizeof(listPageCount), reinterpret_cast<char*>(&listPageCount)) != sizeof(listPageCount)) {
+                    if (ptr->WriteBinary(sizeof(listPageCount), reinterpret_cast<char*>(&listPageCount)) != sizeof(listPageCount)) {//写入该pl占用的页数
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write SSDIndex File!");
                         throw std::runtime_error("Failed to write SSDIndex File");
                     }
@@ -1606,16 +1607,16 @@ namespace SPTAG
 
                 std::uint64_t paddedSize = 0;
                 // iterate over all the posting lists
-                for (auto id : p_postingOrderInIndex)
+                for (auto id : p_postingOrderInIndex)//按物理写入顺序
                 {
-                    std::uint64_t targetOffset = static_cast<uint64_t>(p_postPageNum[id]) * PageSize + p_postPageOffset[id];
+                    std::uint64_t targetOffset = static_cast<uint64_t>(p_postPageNum[id]) * PageSize + p_postPageOffset[id];//这个pl应该写在哪个页，哪个偏移
                     if (targetOffset < listOffset)
                     {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "List offset not match, targetOffset < listOffset!\n");
                         throw std::runtime_error("List offset mismatch");
                     }
                     // write padding vals before the posting list
-                    if (targetOffset > listOffset)
+                    if (targetOffset > listOffset)// listoffset 空洞 targetoffset，
                     {
                         if (targetOffset - listOffset > PageSize)
                         {
@@ -1630,14 +1631,14 @@ namespace SPTAG
 
                         paddedSize += targetOffset - listOffset;
 
-                        listOffset = targetOffset;
+                        listOffset = targetOffset;//跳过空洞
                     }
 
-                    if (p_postingListSizes[id] == 0)
+                    if (p_postingListSizes[id] == 0)//跳过空的postinglist
                     {
                         continue;
                     }
-                    int postingListId = id + (int)p_postingListOffset;
+                    int postingListId = id + (int)p_postingListOffset;//计算得到该postinglist的实际ID
                     // get posting list full content and write it at once
                     ValueType *headVector = nullptr;
                     if (p_enableDeltaEncoding)
@@ -1646,8 +1647,8 @@ namespace SPTAG
                     }
                     std::string postingListFullData = GetPostingListFullData(
                         postingListId, p_postingListSizes[id], p_postingSelections, p_fullVectors, p_enableDeltaEncoding, p_enablePostingListRearrange, headVector);
-                    size_t postingListFullSize = p_postingListSizes[id] * p_spacePerVector;
-                    if (postingListFullSize != postingListFullData.size())
+                    size_t postingListFullSize = p_postingListSizes[id] * p_spacePerVector;//计算出该postinglist需要占用的字节数
+                    if (postingListFullSize != postingListFullData.size())//对比计算出的大小与获取出的数据大小
                     {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "posting list full data size NOT MATCH! postingListFullData.size(): %zu postingListFullSize: %zu \n", postingListFullData.size(), postingListFullSize);
                         throw std::runtime_error("Posting list full size mismatch");
@@ -1670,7 +1671,7 @@ namespace SPTAG
                     }
                     else
                     {
-                        if (ptr->WriteBinary(postingListFullSize, postingListFullData.data()) != postingListFullSize)
+                        if (ptr->WriteBinary(postingListFullSize, postingListFullData.data()) != postingListFullSize)//把整个pl的内容，按字节，连续写进SSDIndex文件
                         {
                             SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write SSDIndex File!");
                             throw std::runtime_error("Failed to write SSDIndex File");
@@ -1679,7 +1680,7 @@ namespace SPTAG
                     }
                 }
 
-                paddingSize = PageSize - (listOffset % PageSize);
+                paddingSize = PageSize - (listOffset % PageSize);//当前文件是否需要填充
                 if (paddingSize == PageSize)
                 {
                     paddingSize = 0;

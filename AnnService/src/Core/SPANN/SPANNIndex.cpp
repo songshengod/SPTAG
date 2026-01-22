@@ -779,41 +779,41 @@ template <typename T>
 int Index<T>::SelectHeadDynamicallyInternal(const std::shared_ptr<COMMON::BKTree> p_tree, int p_nodeID,
                                             const Options &p_opts, std::vector<int> &p_selected)
 {
-    typedef std::pair<int, int> CSPair;
+    typedef std::pair<int, int> CSPair;//用来记录：哪个子节点，该子节点子树规模
     std::vector<CSPair> children;
-    int childrenSize = 1;
+    int childrenSize = 1;//自身节点+1
     const auto &node = (*p_tree)[p_nodeID];
     if (node.childStart >= 0)
     {
         children.reserve(node.childEnd - node.childStart);
-        for (int i = node.childStart; i < node.childEnd; ++i)
+        for (int i = node.childStart; i < node.childEnd; ++i)//遍历BKT的所有子节点
         {
             int cs = SelectHeadDynamicallyInternal(p_tree, i, p_opts, p_selected);
-            if (cs > 0)
+            if (cs > 0)//说明子树还没有被截断
             {
                 children.emplace_back(i, cs);
-                childrenSize += cs;
+                childrenSize += cs;//把子树累加
             }
         }
     }
 
-    if (childrenSize >= p_opts.m_selectThreshold)
+    if (childrenSize >= p_opts.m_selectThreshold)//如果子树规模大于阈值
     {
         if (node.centerid < (*p_tree)[0].centerid)
         {
-            p_selected.push_back(node.centerid);
+            p_selected.push_back(node.centerid);//选当前节点的中心点
         }
 
-        if (childrenSize > p_opts.m_splitThreshold)
+        if (childrenSize > p_opts.m_splitThreshold)//如果累加子树规模很大，只选一个Head不够，再选
         {
             std::sort(children.begin(), children.end(),
-                      [](const CSPair &a, const CSPair &b) { return a.second > b.second; });
+                      [](const CSPair &a, const CSPair &b) { return a.second > b.second; });//按照子树规模排序
 
-            size_t selectCnt = static_cast<size_t>(std::ceil(childrenSize * 1.0 / p_opts.m_splitFactor) + 0.5);
+            size_t selectCnt = static_cast<size_t>(std::ceil(childrenSize * 1.0 / p_opts.m_splitFactor) + 0.5);//计算还要选多少个Head
             // if (selectCnt > 1) selectCnt -= 1;
             for (size_t i = 0; i < selectCnt && i < children.size(); ++i)
             {
-                p_selected.push_back((*p_tree)[children[i].first].centerid);
+                p_selected.push_back((*p_tree)[children[i].first].centerid);//从最大的子树里选Head
             }
         }
 
@@ -844,7 +844,7 @@ void Index<T>::SelectHeadDynamically(const std::shared_ptr<COMMON::BKTree> p_tre
     int selectThreshold = m_options.m_selectThreshold;
     int splitThreshold = m_options.m_splitThreshold;
 
-    double minDiff = 100;
+    double minDiff = 100;//记录当前最接近目标比例的误差
     for (int select = 2; select <= m_options.m_selectThreshold; ++select)
     {
         opts.m_selectThreshold = select;
@@ -858,16 +858,16 @@ void Index<T>::SelectHeadDynamically(const std::shared_ptr<COMMON::BKTree> p_tre
             opts.m_splitThreshold = (l + r) / 2;
             p_selected.clear();
 
-            SelectHeadDynamicallyInternal(p_tree, 0, opts, p_selected);
+            SelectHeadDynamicallyInternal(p_tree, 0, opts, p_selected);//根据当前阈值选Head
             std::sort(p_selected.begin(), p_selected.end());
             p_selected.erase(std::unique(p_selected.begin(), p_selected.end()), p_selected.end());
 
-            double diff = static_cast<double>(p_selected.size()) / p_vectorCount - m_options.m_ratio;
+            double diff = static_cast<double>(p_selected.size()) / p_vectorCount - m_options.m_ratio;//计算误差diff
 
             SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Select Threshold: %d, Split Threshold: %d, diff: %.2lf%%.\n",
                          opts.m_selectThreshold, opts.m_splitThreshold, diff * 100.0);
 
-            if (minDiff > fabs(diff))
+            if (minDiff > fabs(diff))//记录最优参数
             {
                 minDiff = fabs(diff);
 

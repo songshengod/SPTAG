@@ -17,11 +17,11 @@ namespace SPTAG
 
             void RebuildNeighbors(VectorIndex* index, const SizeType node, SizeType* nodes, const BasicResult* queryResults, const int numResults) {
                 DimensionType count = 0;
-                for (int j = 0; j < numResults && count < m_iNeighborhoodSize; j++) {
+                for (int j = 0; j < numResults && count < m_iNeighborhoodSize; j++) {//遍历搜索结果，直到填满领域大小
                     const BasicResult& item = queryResults[j];
-                    if (item.VID < 0) break;
-                    if (item.VID == node) continue;
-                    nodes[count++] = item.VID;
+                    if (item.VID < 0) break;//结果无效
+                    if (item.VID == node) continue;//排除自己
+                    nodes[count++] = item.VID;//填入邻居列表
                 }
                 for (DimensionType j = count; j < m_iNeighborhoodSize; j++)  nodes[j] = -1;
             }

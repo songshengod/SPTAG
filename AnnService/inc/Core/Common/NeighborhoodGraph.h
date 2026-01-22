@@ -447,8 +447,8 @@ break;
             {
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "build RNG graph!\n");
 
-                m_iGraphSize = index->GetNumSamples();
-                m_iNeighborhoodSize = (DimensionType)(ceil(m_iNeighborhoodSize * m_fNeighborhoodScale) * (m_rebuild + 1));
+                m_iGraphSize = index->GetNumSamples();//定义图中的节点数量
+                m_iNeighborhoodSize = (DimensionType)(ceil(m_iNeighborhoodSize * m_fNeighborhoodScale) * (m_rebuild + 1));//每个节点在图中允许拥有的最大邻居数。
                 m_pNeighborhoodGraph.Initialize(m_iGraphSize, m_iNeighborhoodSize, index->m_iDataBlockSize, index->m_iDataCapacity);
 
                 if (m_iGraphSize < 1000) {
@@ -602,7 +602,7 @@ break;
                     std::vector<std::thread> mythreads;
                     mythreads.reserve(m_iThreadNum);
                     std::atomic_size_t sent(0);
-                    for (int tid = 0; tid < m_iThreadNum; tid++)
+                    for (int tid = 0; tid < m_iThreadNum; tid++)//多线程
                     {
                         mythreads.emplace_back([&, tid]() {
                             size_t i = 0;
@@ -612,7 +612,7 @@ break;
                                 if (i < m_iGraphSize)
                                 {
                                     RefineNode<T>(index, i, false, false, (int)(m_iCEF * m_fCEFScale));
-                                    if ((i * 5) % m_iGraphSize == 0)
+                                    if ((i * 5) % m_iGraphSize == 0)//每完成20%的节点处理，打印一次。
                                         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Refine %d %d%%\n", iter,
                                                      static_cast<int>(i * 1.0 / m_iGraphSize * 100));
 
@@ -743,20 +743,20 @@ break;
             template <typename T>
             void RefineNode(VectorIndex* index, const SizeType node, bool updateNeighbors, bool searchDeleted, int CEF)
             {
-                COMMON::QueryResultSet<T> query((const T*)index->GetSample(node), CEF + 1);
+                COMMON::QueryResultSet<T> query((const T*)index->GetSample(node), CEF + 1);//把自己当成查询向量
                 void* rec_query = nullptr;
                 if (index->m_pQuantizer) {
                     rec_query = ALIGN_ALLOC(index->m_pQuantizer->ReconstructSize());
                     index->m_pQuantizer->ReconstructVector((const uint8_t*)query.GetTarget(), rec_query);
                     query.SetTarget((T*)rec_query, index->m_pQuantizer);
                 }
-                index->RefineSearchIndex(query, searchDeleted);
-                RebuildNeighbors(index, node, m_pNeighborhoodGraph[node], query.GetResults(), CEF + 1);
+                index->RefineSearchIndex(query, searchDeleted);//寻找新候选邻居
+                RebuildNeighbors(index, node, m_pNeighborhoodGraph[node], query.GetResults(), CEF + 1);//重构邻居列表
                 if (rec_query)
                 {
                     ALIGN_FREE(rec_query);
                 }
-                if (updateNeighbors) {
+                if (updateNeighbors) {//双向更新
                     // update neighbors
                     for (int j = 0; j <= CEF; j++)
                     {
