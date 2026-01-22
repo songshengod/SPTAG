@@ -1407,11 +1407,11 @@ namespace SPTAG
 
                         p_postingOrderInIndex.push_back(iter->id);//记录这个postinglist的物理写入顺序
 
-                        currOffset += iter->rest;//把这个postinglist的多余的放进Page
+                        currOffset += iter->rest;//把这个postinglist的多余的放进Page，指针后移
                         if (currOffset > PageSize)
                         {
                             SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Crossing extra pages\n");
-                            throw std::runtime_error("Read too many pages");
+                            throw std::runtime_error("Read too many pages"); 
                         }
 
                         if (currOffset == PageSize)//如果刚好填满一页，直接换到下一页
@@ -1482,7 +1482,7 @@ namespace SPTAG
                 std::unique_ptr<char[]> paddingVals(new char[PageSize]);
                 memset(paddingVals.get(), 0, sizeof(char) * PageSize);//准备一个4KB的全0 缓冲区用于填充
                 // paddingSize: bytes left in the last page
-                std::uint64_t paddingSize = PageSize - (listOffset % PageSize);//postinglist内容一定从整个Page开始。 10-（10%4）=2
+                std::uint64_t paddingSize = PageSize - (listOffset % PageSize);//postinglist内容一定从整个Page开始。 4-（10%4）=2
                 if (paddingSize == PageSize)
                 {
                     paddingSize = 0;
@@ -1607,7 +1607,7 @@ namespace SPTAG
 
                 std::uint64_t paddedSize = 0;
                 // iterate over all the posting lists
-                for (auto id : p_postingOrderInIndex)//按物理写入顺序
+                for (auto id : p_postingOrderInIndex)//按物理写入顺序，SelectPostingoffset计算了每个pl的位置，现在写真实数据
                 {
                     std::uint64_t targetOffset = static_cast<uint64_t>(p_postPageNum[id]) * PageSize + p_postPageOffset[id];//这个pl应该写在哪个页，哪个偏移
                     if (targetOffset < listOffset)
@@ -1693,7 +1693,7 @@ namespace SPTAG
 
                 if (paddingSize > 0)
                 {
-                    if (ptr->WriteBinary(paddingSize, reinterpret_cast<char *>(paddingVals.get())) != paddingSize)
+                    if (ptr->WriteBinary(paddingSize, reinterpret_cast<char *>(paddingVals.get())) != paddingSize)//向SSDindex文件中写入paddingSize字节，内容是paddingvals
                     {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to write SSDIndex File!");
                         throw std::runtime_error("Failed to write SSDIndex File");
