@@ -194,7 +194,7 @@ namespace SPTAG
             virtual bool LoadIndex(Options& p_opt, COMMON::VersionLabel& p_versionMap, COMMON::Dataset<std::uint64_t>& p_vectorTranslateMap,  std::shared_ptr<VectorIndex> m_index) {
                 m_extraFullGraphFile = p_opt.m_indexDirectory + FolderSep + p_opt.m_ssdIndex;
                 std::string curFile = m_extraFullGraphFile;
-                p_opt.m_searchPostingPageLimit = max(p_opt.m_searchPostingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * (p_opt.m_dim * sizeof(ValueType) + sizeof(int)) + PageSize - 1) / PageSize));
+                p_opt.m_searchPostingPageLimit = max(p_opt.m_searchPostingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * (p_opt.m_dim * sizeof(ValueType) + sizeof(int)) + PageSize - 1) / PageSize));//计算：加载一个pl最坏需要多少磁盘页
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Load index with posting page limit:%d\n", p_opt.m_searchPostingPageLimit);
                 do {
                     auto curIndexFile = f_createAsyncIO();
@@ -215,7 +215,7 @@ namespace SPTAG
 
                     m_indexFiles.emplace_back(curIndexFile);
                     try {
-                        m_totalListCount += LoadingHeadInfo(curFile, p_opt.m_searchPostingPageLimit, m_listInfos);
+                        m_totalListCount += LoadingHeadInfo(curFile, p_opt.m_searchPostingPageLimit, m_listInfos);//加载每个pl的头部的元数据，解析出每个pl在磁盘上的起始偏移量和长度。
                     } 
                     catch (std::exception& e)
                     {
@@ -224,7 +224,7 @@ namespace SPTAG
                     }
 
                     curFile = m_extraFullGraphFile + "_" + std::to_string(m_indexFiles.size());
-                } while (fileexists(curFile.c_str()));
+                } while (fileexists(curFile.c_str()));//SPANN支持将巨大的磁盘索引拆分成多个分片文件。
                 m_oneContext = (m_indexFiles.size() == 1);
 
                 m_opt = &p_opt;
@@ -240,7 +240,7 @@ namespace SPTAG
                 
                 m_listPerFile = static_cast<int>((m_totalListCount + m_indexFiles.size() - 1) / m_indexFiles.size());
 
-                p_versionMap.Load(p_opt.m_indexDirectory + FolderSep + p_opt.m_deleteIDFile, p_opt.m_datasetRowsInBlock, p_opt.m_datasetCapacity);
+                p_versionMap.Load(p_opt.m_indexDirectory + FolderSep + p_opt.m_deleteIDFile, p_opt.m_datasetRowsInBlock, p_opt.m_datasetCapacity);//加载逻辑删除ID，SPANN需要知道哪些向量已经被删除
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Current vector num: %d.\n", p_versionMap.Count());
 
 #ifndef _MSC_VER
@@ -1180,7 +1180,7 @@ namespace SPTAG
                 std::uint16_t pageOffset = 0;
             };
 
-            int LoadingHeadInfo(const std::string& p_file, int p_postingPageLimit, std::vector<ListInfo>& p_listInfos)
+            int LoadingHeadInfo(const std::string& p_file, int p_postingPageLimit, std::vector<ListInfo>& p_listInfos)//从SSD索引文件中读取pl的头信息，并把这些头信息存到内存结构listinfo中，形成SSD搜索时必须的目录
             {
                 auto ptr = SPTAG::f_createIO();
                 if (ptr == nullptr || !ptr->Initialize(p_file.c_str(), std::ios::binary | std::ios::in)) {
@@ -1193,24 +1193,24 @@ namespace SPTAG
                 int m_totalDocumentCount;
                 int m_listPageOffset;
 
-                if (ptr->ReadBinary(sizeof(m_listCount), reinterpret_cast<char*>(&m_listCount)) != sizeof(m_listCount)) {
+                if (ptr->ReadBinary(sizeof(m_listCount), reinterpret_cast<char*>(&m_listCount)) != sizeof(m_listCount)) {//pl的数量
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read head info file!\n");
                     throw std::runtime_error("Failed read file in LoadingHeadInfo");
                 }
-                if (ptr->ReadBinary(sizeof(m_totalDocumentCount), reinterpret_cast<char*>(&m_totalDocumentCount)) != sizeof(m_totalDocumentCount)) {
+                if (ptr->ReadBinary(sizeof(m_totalDocumentCount), reinterpret_cast<char*>(&m_totalDocumentCount)) != sizeof(m_totalDocumentCount)) {//pl中向量的总数量
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read head info file!\n");
                     throw std::runtime_error("Failed read file in LoadingHeadInfo");
                 }
-                if (ptr->ReadBinary(sizeof(m_iDataDimension), reinterpret_cast<char*>(&m_iDataDimension)) != sizeof(m_iDataDimension)) {
+                if (ptr->ReadBinary(sizeof(m_iDataDimension), reinterpret_cast<char*>(&m_iDataDimension)) != sizeof(m_iDataDimension)) {//向量维度
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read head info file!\n");
                     throw std::runtime_error("Failed read file in LoadingHeadInfo");
                 }
-                if (ptr->ReadBinary(sizeof(m_listPageOffset), reinterpret_cast<char*>(&m_listPageOffset)) != sizeof(m_listPageOffset)) {
+                if (ptr->ReadBinary(sizeof(m_listPageOffset), reinterpret_cast<char*>(&m_listPageOffset)) != sizeof(m_listPageOffset)) {//pl在磁盘文件中的起始页码偏移量
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read head info file!\n");
                     throw std::runtime_error("Failed read file in LoadingHeadInfo");
                 }
 
-                if (m_vectorInfoSize == 0) m_vectorInfoSize = m_iDataDimension * sizeof(ValueType) + sizeof(int);
+                if (m_vectorInfoSize == 0) m_vectorInfoSize = m_iDataDimension * sizeof(ValueType) + sizeof(int);//每个向量在磁盘上的空间
                 else if (m_vectorInfoSize != m_iDataDimension * sizeof(ValueType) + sizeof(int)) {
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read head info file! DataDimension and ValueType are not match!\n");
                     throw std::runtime_error("DataDimension and ValueType don't match in LoadingHeadInfo");
@@ -1226,9 +1226,9 @@ namespace SPTAG
                 size_t biglistCount = 0;
                 size_t biglistElementCount = 0;
                 int pageNum;
-                for (int i = 0; i < m_listCount; ++i)
+                for (int i = 0; i < m_listCount; ++i)//逐个读取pl的头信息
                 {
-                    ListInfo* listInfo = &(p_listInfos[totalListCount + i]);
+                    ListInfo* listInfo = &(p_listInfos[totalListCount + i]);//pl的头信息存放在listInfo结构中
 
                     if (m_enableDataCompression)
                     {
@@ -1237,7 +1237,7 @@ namespace SPTAG
                             throw std::runtime_error("Failed read file in LoadingHeadInfo");
                         }
                     }
-                    if (ptr->ReadBinary(sizeof(pageNum), reinterpret_cast<char*>(&(pageNum))) != sizeof(pageNum)) {
+                    if (ptr->ReadBinary(sizeof(pageNum), reinterpret_cast<char*>(&(pageNum))) != sizeof(pageNum)) {//读取的都是Build阶段写入文件的原始目录信息
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read head info file!\n");
                         throw std::runtime_error("Failed read file in LoadingHeadInfo");
                     }
@@ -1253,7 +1253,7 @@ namespace SPTAG
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read head info file!\n");
                         throw std::runtime_error("Failed read file in LoadingHeadInfo");
                     }
-                    listInfo->listOffset = (static_cast<uint64_t>(m_listPageOffset + pageNum) << PageSizeEx);
+                    listInfo->listOffset = (static_cast<uint64_t>(m_listPageOffset + pageNum) << PageSizeEx);//计算pl在磁盘文件中的实际起始物理地址
                     if (!m_enableDataCompression)
                     {
                         listInfo->listTotalBytes = listInfo->listEleCount * m_vectorInfoSize;
@@ -1269,7 +1269,7 @@ namespace SPTAG
                         biglistElementCount += listInfo->listEleCount;
                     }
 
-                    if (pageCountDist.count(pageCount) == 0)
+                    if (pageCountDist.count(pageCount) == 0)//统计占N页的pl有多少个
                     {
                         pageCountDist[pageCount] = 1;
                     }
@@ -1311,7 +1311,7 @@ namespace SPTAG
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
                     "Big page (>4K): list count %zu, total element count %zu.\n",
                     biglistCount,
-                    biglistElementCount);
+                    biglistElementCount);//统计占用页数大于4K的pl数量和这些pl包含的向量总数量
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Total Element Count: %llu\n", totalListElementCount);
 

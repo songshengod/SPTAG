@@ -802,7 +802,7 @@ ErrorCode VectorIndex::LoadIndex(const std::string &p_loaderFilePath, std::share
     if (!folderPath.empty() && *(folderPath.rbegin()) != FolderSep)
         folderPath += FolderSep;
 
-    Helper::IniReader iniReader;
+    Helper::IniReader iniReader;//首先解析indexloader.ini
     {
         auto fp = SPTAG::f_createIO();
         if (fp == nullptr || !fp->Initialize((folderPath + "indexloader.ini").c_str(), std::ios::in))
@@ -811,7 +811,7 @@ ErrorCode VectorIndex::LoadIndex(const std::string &p_loaderFilePath, std::share
             return ErrorCode::FailedParseValue;
     }
 
-    IndexAlgoType algoType = iniReader.GetParameter("Index", "IndexAlgoType", IndexAlgoType::Undefined);
+    IndexAlgoType algoType = iniReader.GetParameter("Index", "IndexAlgoType", IndexAlgoType::Undefined);//确定使用什么参数
     VectorValueType valueType = iniReader.GetParameter("Index", "ValueType", VectorValueType::Undefined);
     if ((p_vectorIndex = CreateInstance(algoType, valueType)) == nullptr)
         return ErrorCode::FailedParseValue;
@@ -821,12 +821,12 @@ ErrorCode VectorIndex::LoadIndex(const std::string &p_loaderFilePath, std::share
         return ret;
 
     std::shared_ptr<std::vector<std::string>> indexfiles = p_vectorIndex->GetIndexFiles();
-    if (iniReader.DoesSectionExist("MetaData"))
+    if (iniReader.DoesSectionExist("MetaData"))//跳过
     {
         indexfiles->push_back(p_vectorIndex->m_sMetadataFile);
         indexfiles->push_back(p_vectorIndex->m_sMetadataIndexFile);
     }
-    if (iniReader.DoesSectionExist("Quantizer"))
+    if (iniReader.DoesSectionExist("Quantizer"))//跳过
     {
         indexfiles->push_back(p_vectorIndex->m_sQuantizerFile);
     }
@@ -847,7 +847,7 @@ ErrorCode VectorIndex::LoadIndex(const std::string &p_loaderFilePath, std::share
         p_vectorIndex->SetParameter("IndexDirectory", p_loaderFilePath, "Base");
     }
 
-    if ((ret = p_vectorIndex->LoadIndexData(handles)) != ErrorCode::Success)
+    if ((ret = p_vectorIndex->LoadIndexData(handles)) != ErrorCode::Success)//加载数据
         return ret;
 
     size_t metaStart = p_vectorIndex->GetIndexFiles()->size();

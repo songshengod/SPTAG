@@ -136,7 +136,7 @@ ErrorCode Index<T>::LoadIndexData(const std::vector<std::shared_ptr<Helper::Disk
     if (!m_options.m_persistentBufferPath.empty() && !direxists(m_options.m_persistentBufferPath.c_str()))
         mkdir(m_options.m_persistentBufferPath.c_str());
 
-    auto headfiles = m_index->GetIndexFiles();
+    auto headfiles = m_index->GetIndexFiles();//获取Headindex文件列表
     if (m_options.m_recovery)
     {
         std::shared_ptr<std::vector<std::string>> files(new std::vector<std::string>);
@@ -521,7 +521,7 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
     if (nullptr == m_extraSearcher)
         return ErrorCode::EmptyIndex;
 
-    COMMON::QueryResultSet<T> *p_queryResults = (COMMON::QueryResultSet<T> *)&p_query;
+    COMMON::QueryResultSet<T> *p_queryResults = (COMMON::QueryResultSet<T> *)&p_query;//存放的是内存Headindex的搜索结果。
 
     auto workSpace = m_workSpaceFactory->GetWorkSpace();
     if (!workSpace)
@@ -537,14 +537,14 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
     workSpace->m_deduper.clear();
     workSpace->m_postingIDs.clear();
 
-    float limitDist = p_queryResults->GetResult(0)->Dist * m_options.m_maxDistRatio;
+    float limitDist = p_queryResults->GetResult(0)->Dist * m_options.m_maxDistRatio;//如果某个Head里查询点太远，超过了ratio倍，就会抛弃
     int i = 0;
     for (; i < m_options.m_searchInternalResultNum; ++i)
     {
         auto res = p_queryResults->GetResult(i);
         if (res->VID == -1 || (limitDist > 0.1 && res->Dist > limitDist))
             break;
-        if (m_extraSearcher->CheckValidPosting(res->VID))
+        if (m_extraSearcher->CheckValidPosting(res->VID))//如果res-vid存在于listInfo中，pl会被放入workspace，这些pl会被真正度读SSD
         {
             workSpace->m_postingIDs.emplace_back(res->VID);
         }
@@ -583,9 +583,9 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
     }
 
     p_queryResults->Reverse();
-    m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, p_stats);
+    m_extraSearcher->SearchIndex(workSpace.get(), *p_queryResults, m_index, p_stats);//对每个plID：计算位置，发起SSDio
     m_workSpaceFactory->ReturnWorkSpace(std::move(workSpace));
-    p_queryResults->SortResult();
+    p_queryResults->SortResult();//排序最后结果
     return ErrorCode::Success;
 }
 
@@ -1165,13 +1165,13 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
             std::shared_ptr<Helper::DiskIO> ptr = SPTAG::f_createIO();
             if (ptr == nullptr ||
                 !ptr->Initialize((m_options.m_indexDirectory + FolderSep + m_options.m_headIDFile).c_str(),
-                                 std::ios::binary | std::ios::in))
+                                 std::ios::binary | std::ios::in))//headIDfile:head index的ID映射文件，一个数组，Head[0]=globalID,Headindex用的是局部ID，Diskindex认识的是全量ID
             {
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to open headIDFile file:%s\n",
                              (m_options.m_indexDirectory + FolderSep + m_options.m_headIDFile).c_str());
                 return ErrorCode::Fail;
             }
-            m_vectorTranslateMap.Load(ptr, m_index->m_iDataBlockSize, m_index->m_iDataCapacity);
+            m_vectorTranslateMap.Load(ptr, m_index->m_iDataBlockSize, m_index->m_iDataCapacity);//桥梁
         }
 
         if (m_options.m_buildSsdIndex)
@@ -1213,9 +1213,9 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
 
         if (m_extraSearcher != nullptr)
         {
-            if ((m_options.m_storage != Storage::STATIC) && m_options.m_preReassign)
+            if ((m_options.m_storage != Storage::STATIC) && m_options.m_preReassign)//跳过了
             {
-                if (m_extraSearcher->RefineIndex(m_index) != ErrorCode::Success)
+                if (m_extraSearcher->RefineIndex(m_index) != ErrorCode::Success)//在Headindex已经加载完后，用Head的真实结构，反向修正SSDindex的组织方式
                     return ErrorCode::Fail;
             }
         }

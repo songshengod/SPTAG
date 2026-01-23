@@ -1716,15 +1716,15 @@ namespace SPTAG::SPANN {
             if (p_stats) p_stats->m_exSetUpLatency = 0;
 
             COMMON::QueryResultSet<ValueType>& queryResults = *((COMMON::QueryResultSet<ValueType>*) & p_queryResults);
-            if (queryResults.GetResult(0)->VID != -1)
+            if (queryResults.GetResult(0)->VID != -1)//好的结果
             {
                 int head = 0;
                 for (int i = 0; i < queryResults.GetResultNum(); ++i)
                 {
                     SPTAG::BasicResult* ri = queryResults.GetResult(i);
-                    if (ri->VID != -1 && !m_versionMap->Deleted(ri->VID) && !p_exWorkSpace->m_deduper.CheckAndSet(ri->VID))
+                    if (ri->VID != -1 && !m_versionMap->Deleted(ri->VID) && !p_exWorkSpace->m_deduper.CheckAndSet(ri->VID))//存在，没有被删除，去过重
                     {
-                        if (head != i)
+                        if (head != i)//说明前面有空位，当前i是有效的。就把他往前移
                         {
                             SPTAG::BasicResult* rhead = queryResults.GetResult(head);
                             *rhead = *ri;
@@ -1734,7 +1734,7 @@ namespace SPTAG::SPANN {
  
                         ++head;
                     }
-                    else
+                    else//如果不满足过滤条件，直接标记为无效。
                     {
                         ri->VID = -1;
                         ri->Dist = MaxDist;
@@ -1754,7 +1754,7 @@ namespace SPTAG::SPANN {
 
             auto readStart = std::chrono::high_resolution_clock::now();
             if (db->MultiGet(p_exWorkSpace->m_postingIDs, p_exWorkSpace->m_pageBuffers, remainLimit, &(p_exWorkSpace->m_diskRequests)) != ErrorCode::Success ||
-                !ValidatePostings(p_exWorkSpace->m_postingIDs, p_exWorkSpace->m_pageBuffers))
+                !ValidatePostings(p_exWorkSpace->m_postingIDs, p_exWorkSpace->m_pageBuffers))//根据postingids里的ID，从磁盘找对应的pl，读取的数据直接放在Pagebuffer，还会进行数据校验
             {
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "[SearchIndex] read postings fail!\n");
                 return ErrorCode::DiskIOFail;
@@ -1767,7 +1767,7 @@ namespace SPTAG::SPANN {
                 auto curPostingID = p_exWorkSpace->m_postingIDs[pi];
                 auto& buffer = (p_exWorkSpace->m_pageBuffers[pi]);
                 char* p_postingListFullData = (char*)(buffer.GetBuffer());
-                int vectorNum = (int)(buffer.GetAvailableSize() / m_vectorInfoSize);
+                int vectorNum = (int)(buffer.GetAvailableSize() / m_vectorInfoSize);//通过将总大小除以单个向量，程序计算出内存里包含多少个向量
 
                 diskIO += ((buffer.GetAvailableSize() + PageSize - 1) >> PageSizeEx);
                 diskRead += (int)(buffer.GetAvailableSize());
@@ -1776,9 +1776,9 @@ namespace SPTAG::SPANN {
                 int realNum = vectorNum;
                 listElements += vectorNum;
                 auto compStart = std::chrono::high_resolution_clock::now();
-                for (int i = 0; i < vectorNum; i++) {
+                for (int i = 0; i < vectorNum; i++) {//对pl里的每个向量进行处理
                     char* vectorInfo = p_postingListFullData + i * m_vectorInfoSize;
-                    int vectorID = *(reinterpret_cast<int*>(vectorInfo));
+                    int vectorID = *(reinterpret_cast<int*>(vectorInfo));//提取向量ID
 
 		            //SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "DEBUG: vectorID:%d\n", vectorID);
                     if (m_versionMap->Deleted(vectorID)) {
@@ -1790,13 +1790,13 @@ namespace SPTAG::SPANN {
                         listElements--;
                         continue;
                     }
-                    auto distance2leaf = p_index->ComputeDistance(queryResults.GetQuantizedTarget(), vectorInfo + m_metaDataSize);
-                    queryResults.AddPoint(vectorID, distance2leaf);
+                    auto distance2leaf = p_index->ComputeDistance(queryResults.GetQuantizedTarget(), vectorInfo + m_metaDataSize);//计算查询向量与磁盘原始向量之间的距离
+                    queryResults.AddPoint(vectorID, distance2leaf);//维护一个最小堆，保留最优的TopK个结果。
                 }
                 auto compEnd = std::chrono::high_resolution_clock::now();
                 if (realNum <= m_mergeThreshold) MergeAsync(p_index.get(), curPostingID); // TODO: Control merge
 
-                compLatency += ((double)std::chrono::duration_cast<std::chrono::microseconds>(compEnd - compStart).count());
+                compLatency += ((double)std::chrono::duration_cast<std::chrono::microseconds>(compEnd - compStart).count());//计算延迟累加
 
                 if (truth) {
                     for (int i = 0; i < vectorNum; ++i) {

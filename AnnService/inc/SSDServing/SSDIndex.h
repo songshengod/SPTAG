@@ -102,10 +102,10 @@ namespace SPTAG {
                 std::vector<QueryResult>& p_results,
                 std::vector<SPANN::SearchStats>& p_stats,
                 int p_maxQueryCount, int p_internalResultNum)
-            {
-                int numQueries = min(static_cast<int>(p_results.size()), p_maxQueryCount);
+            {//线程数，存储搜索结果，存储搜索统计信息
+                int numQueries = min(static_cast<int>(p_results.size()), p_maxQueryCount);//外部准备好的query数量，最多允许处理的query数量
 
-                std::atomic_size_t queriesSent(0);
+                std::atomic_size_t queriesSent(0);//原子计数器，动态分发query
 
                 std::vector<std::thread> threads;
                 threads.reserve(p_numThreads);
@@ -114,30 +114,30 @@ namespace SPTAG {
                 Utils::StopW sw;
 
                 for (int i = 0; i < p_numThreads; i++) { threads.emplace_back([&, i]()
-                    {
+                    {//开启lambda表达式线程函数：定义每个线程要执行的具体任务
                         NumaStrategy ns = (p_index->GetDiskIndex() != nullptr) ? NumaStrategy::SCATTER : NumaStrategy::LOCAL; // Only for SPANN, we need to avoid IO threads overlap with search threads.
-                        Helper::SetThreadAffinity(i, threads[i], ns, OrderStrategy::ASC); 
+                        Helper::SetThreadAffinity(i, threads[i], ns, OrderStrategy::ASC); //决定NUMA策略：如果有磁盘索引，使用SCATTER打散，避免io线程与计算线程冲突，设置线程亲和性，将线程绑定到特定的cpu核心来减少上下文切换
 
                         Utils::StopW threadws;
                         size_t index = 0;
                         while (true)
                         {
-                            index = queriesSent.fetch_add(1);
-                            if (index < numQueries)
+                            index = queriesSent.fetch_add(1);//获取当前任务索引，并将计数器加一
+                            if (index < numQueries)//如果还有查询没有做完
                             {
-                                if ((index & ((1 << 14) - 1)) == 0)
+                                if ((index & ((1 << 14) - 1)) == 0)//每发送2的14次方个查询，打印一次进度日志
                                 {
                                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Sent %.2lf%%...\n", index * 100.0 / numQueries);
                                 }
 
-                                double startTime = threadws.getElapsedMs();
-                                p_index->GetMemoryIndex()->SearchIndex(p_results[index]);
+                                double startTime = threadws.getElapsedMs();//内存索引搜索
+                                p_index->GetMemoryIndex()->SearchIndex(p_results[index]);//在内存中寻找与当前query最近的head 候选点
                                 double endTime = threadws.getElapsedMs();
-                                p_index->SearchDiskIndex(p_results[index], &(p_stats[index]));
+                                p_index->SearchDiskIndex(p_results[index], &(p_stats[index]));//根据上面找到的中心点，去磁盘上读取对应的postinglist,进行最终的向量距离比对和TopK排序
                                 double exEndTime = threadws.getElapsedMs();
 
-                                p_stats[index].m_exLatency = exEndTime - endTime;
-                                p_stats[index].m_totalLatency = p_stats[index].m_totalSearchLatency = exEndTime - startTime;
+                                p_stats[index].m_exLatency = exEndTime - endTime;//记录磁盘搜索耗时
+                                p_stats[index].m_totalLatency = p_stats[index].m_totalSearchLatency = exEndTime - startTime;//记录内存+磁盘搜索的总耗时
                             }
                             else
                             {
@@ -148,22 +148,22 @@ namespace SPTAG {
                 }
                 for (auto& thread : threads) { thread.join(); }
 
-                double sendingCost = sw.getElapsedSec();
+                double sendingCost = sw.getElapsedSec();//计算并记录所有查询完成处理所花费的总时间。
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info,
                     "Finish sending in %.3lf seconds, actuallQPS is %.2lf, query count %u.\n",
                     sendingCost,
                     numQueries / sendingCost,
-                    static_cast<uint32_t>(numQueries));
+                    static_cast<uint32_t>(numQueries));//QPS=查询量/总时间
 
-                for (int i = 0; i < numQueries; i++) { p_results[i].CleanQuantizedTarget(); }
+                for (int i = 0; i < numQueries; i++) { p_results[i].CleanQuantizedTarget(); }//释放内存
             }
 
             template <typename ValueType>
             ErrorCode Search(SPANN::Index<ValueType>* p_index)
             {
                 SPANN::Options& p_opts = *(p_index->GetOptions());
-                std::string outputFile = p_opts.m_searchResult;
+                std::string outputFile = p_opts.m_searchResult;//实际搜索结果输出
                 std::string truthFile = p_opts.m_truthPath;
                 std::string warmupFile = p_opts.m_warmupPath;
 
@@ -177,7 +177,7 @@ namespace SPTAG {
                     SetLogger(std::make_shared<Helper::FileLogger>(Helper::LogLevel::LL_Info, p_opts.m_logFile.c_str()));
                 }
                 int numThreads = p_opts.m_searchThreadNum;
-                int internalResultNum = p_opts.m_searchInternalResultNum;
+                int internalResultNum = p_opts.m_searchInternalResultNum;//SSD+Head搜索时，候选结果数量
                 int K = p_opts.m_resultNum;
                 int truthK = (p_opts.m_truthResultNum <= 0) ? K : p_opts.m_truthResultNum;
                 ErrorCode ret;
@@ -204,27 +204,27 @@ namespace SPTAG {
                     }
 
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start warmup...\n");
-                    SearchSequential(p_index, numThreads, warmupResults, warmpUpStats, p_opts.m_queryCountLimit, internalResultNum);
+                    SearchSequential(p_index, numThreads, warmupResults, warmpUpStats, p_opts.m_queryCountLimit, internalResultNum);//预热搜索，会产生真实的io，操作系统将索引加载到cache中。
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nFinish warmup...\n");
                 }
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start loading QuerySet...\n");
-                std::shared_ptr<Helper::ReaderOptions> queryOptions(new Helper::ReaderOptions(p_opts.m_valueType, p_opts.m_dim, p_opts.m_queryType, p_opts.m_queryDelimiter));
-                auto queryReader = Helper::VectorSetReader::CreateInstance(queryOptions);
-                if (ErrorCode::Success != (ret = queryReader->LoadFile(p_opts.m_queryPath)))
+                std::shared_ptr<Helper::ReaderOptions> queryOptions(new Helper::ReaderOptions(p_opts.m_valueType, p_opts.m_dim, p_opts.m_queryType, p_opts.m_queryDelimiter));//创建一个读取器配置对象
+                auto queryReader = Helper::VectorSetReader::CreateInstance(queryOptions);//根据配置实例化一个向量读取器
+                if (ErrorCode::Success != (ret = queryReader->LoadFile(p_opts.m_queryPath)))//加载查询文件
                 {
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read query file.\n");
                     return ret;
                 }
-                auto querySet = queryReader->GetVectorSet();
-                int numQueries = querySet->Count();
+                auto querySet = queryReader->GetVectorSet();//获取加载后的查询向量集合
+                int numQueries = querySet->Count();//查询向量个数
 
-                std::vector<QueryResult> results(numQueries, QueryResult(NULL, max(K, internalResultNum), false));
-                std::vector<SPANN::SearchStats> stats(numQueries);
+                std::vector<QueryResult> results(numQueries, QueryResult(NULL, max(K, internalResultNum), false));//结果集，每个查询对应一个queryResult对象
+                std::vector<SPANN::SearchStats> stats(numQueries);//用于记录每个查询的性能指标
                 for (int i = 0; i < numQueries; ++i)
                 {
                     (*((COMMON::QueryResultSet<ValueType>*)&results[i])).SetTarget(reinterpret_cast<ValueType*>(querySet->GetVector(i)), p_index->m_pQuantizer);
-                    results[i].Reset();
+                    results[i].Reset();//重置结果集
                 }
 
 
@@ -234,7 +234,7 @@ namespace SPTAG {
 
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nFinish ANN Search...\n");
 
-                std::shared_ptr<VectorSet> vectorSet;
+                std::shared_ptr<VectorSet> vectorSet;//定义一个共享指针，用于存放全量向量集
 
                 if (!p_opts.m_vectorPath.empty() && fileexists(p_opts.m_vectorPath.c_str())) {
                     std::shared_ptr<Helper::ReaderOptions> vectorOptions(new Helper::ReaderOptions(p_opts.m_valueType, p_opts.m_dim, p_opts.m_vectorType, p_opts.m_vectorDelimiter));
@@ -247,18 +247,18 @@ namespace SPTAG {
                     }
                 }
 
-                if (p_opts.m_rerank > 0 && vectorSet != nullptr) {
+                if (p_opts.m_rerank > 0 && vectorSet != nullptr) {//重排序
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\n Begin rerank...\n");
-                    for (int i = 0; i < results.size(); i++)
+                    for (int i = 0; i < results.size(); i++)//遍历每个查询结果
                     {
-                        for (int j = 0; j < K; j++)
+                        for (int j = 0; j < K; j++)//遍历该查询下的TopK个结果
                         {
-                            if (results[i].GetResult(j)->VID < 0) continue;
+                            if (results[i].GetResult(j)->VID < 0) continue;//跳过无效ID
                             results[i].GetResult(j)->Dist = COMMON::DistanceUtils::ComputeDistance((const ValueType*)querySet->GetVector(i),
-                                (const ValueType*)vectorSet->GetVector(results[i].GetResult(j)->VID), querySet->Dimension(), p_opts.m_distCalcMethod);
+                                (const ValueType*)vectorSet->GetVector(results[i].GetResult(j)->VID), querySet->Dimension(), p_opts.m_distCalcMethod);//使用原始向量与查询向量重新计算真实距离。
                         }
                         BasicResult* re = results[i].GetResults();
-                        std::sort(re, re + K, COMMON::Compare);
+                        std::sort(re, re + K, COMMON::Compare);//将结果重新排序
                     }
                     K = p_opts.m_rerank;
                 }
@@ -275,7 +275,7 @@ namespace SPTAG {
                         return ErrorCode::FailedOpenFile;
                     }
                     int originalK = truthK;
-                    COMMON::TruthSet::LoadTruth(ptr, truth, numQueries, originalK, truthK, p_opts.m_truthType);
+                    COMMON::TruthSet::LoadTruth(ptr, truth, numQueries, originalK, truthK, p_opts.m_truthType);//加载真值文件
                     char tmp[4];
                     if (ptr->ReadBinary(4, tmp) == 4) {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Truth number is larger than query number(%d)!\n", numQueries);

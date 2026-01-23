@@ -397,7 +397,7 @@ namespace SPTAG
                 }
                 
                 for (SizeType i = 0; i < r; i++) {
-                    IOBINARY(pInput, ReadBinary, sizeof(T) * mycols, (char*)At(i));
+                    IOBINARY(pInput, ReadBinary, sizeof(T) * mycols, (char*)At(i));//读取数据
                 }
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Load %s (%d,%d) Finish!\n", name.c_str(), r, c);
                 return ErrorCode::Success;

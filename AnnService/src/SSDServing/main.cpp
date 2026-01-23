@@ -133,7 +133,7 @@ int BootProgram(bool forANNIndexTestTool, std::map<std::string, std::map<std::st
         return -1;
     }
 
-    if (opts->m_generateTruth)
+    if (opts->m_generateTruth)//搜索时跳过了
     {
         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start generating truth. It's maybe a long time.\n");
         SizeType dim = opts->m_dim;

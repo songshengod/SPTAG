@@ -95,21 +95,21 @@ ErrorCode Index<T>::LoadIndexData(const std::vector<std::shared_ptr<Helper::Disk
 
     ErrorCode ret = ErrorCode::Success;
     if (p_indexStreams[0] == nullptr ||
-        (ret = m_pSamples.Load(p_indexStreams[0], m_iDataBlockSize, m_iDataCapacity)) != ErrorCode::Success)
+        (ret = m_pSamples.Load(p_indexStreams[0], m_iDataBlockSize, m_iDataCapacity)) != ErrorCode::Success)//加载一部分样本数据
         return ret;
-    if (p_indexStreams[1] == nullptr || (ret = m_pTrees.LoadTrees(p_indexStreams[1])) != ErrorCode::Success)
+    if (p_indexStreams[1] == nullptr || (ret = m_pTrees.LoadTrees(p_indexStreams[1])) != ErrorCode::Success)//加载所用树结构
         return ret;
     if (p_indexStreams[2] == nullptr ||
-        (ret = m_pGraph.LoadGraph(p_indexStreams[2], m_iDataBlockSize, m_iDataCapacity)) != ErrorCode::Success)
+        (ret = m_pGraph.LoadGraph(p_indexStreams[2], m_iDataBlockSize, m_iDataCapacity)) != ErrorCode::Success)//加载所用图结构
         return ret;
     if (p_indexStreams[3] == nullptr)
         m_deletedID.Initialize(m_pSamples.R(), m_iDataBlockSize, m_iDataCapacity,
-                               COMMON::Labelset::InvalidIDBehavior::AlwaysContains);
+                               COMMON::Labelset::InvalidIDBehavior::AlwaysContains);//加载逻辑删除
     else if ((ret = m_deletedID.Load(p_indexStreams[3], m_iDataBlockSize, m_iDataCapacity,
                                      COMMON::Labelset::InvalidIDBehavior::AlwaysContains)) != ErrorCode::Success)
         return ret;
 
-    if (m_pSamples.R() != m_pGraph.R() || m_pSamples.R() != m_deletedID.R())
+    if (m_pSamples.R() != m_pGraph.R() || m_pSamples.R() != m_deletedID.R())//判断三者数量是否一致
     {
         SPTAGLIB_LOG(SPTAG::Helper::LogLevel::LL_Error,
                      "Index data is corrupted, please rebuild the index. Samples: %i, Graph: %i, DeletedID: %i.",
