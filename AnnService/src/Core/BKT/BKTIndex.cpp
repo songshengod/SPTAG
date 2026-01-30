@@ -95,7 +95,7 @@ ErrorCode Index<T>::LoadIndexData(const std::vector<std::shared_ptr<Helper::Disk
 
     ErrorCode ret = ErrorCode::Success;
     if (p_indexStreams[0] == nullptr ||
-        (ret = m_pSamples.Load(p_indexStreams[0], m_iDataBlockSize, m_iDataCapacity)) != ErrorCode::Success)//加载一部分样本数据
+        (ret = m_pSamples.Load(p_indexStreams[0], m_iDataBlockSize, m_iDataCapacity)) != ErrorCode::Success)//加载一部分核心数据
         return ret;
     if (p_indexStreams[1] == nullptr || (ret = m_pTrees.LoadTrees(p_indexStreams[1])) != ErrorCode::Success)//加载所用树结构
         return ret;

@@ -1777,7 +1777,7 @@ namespace SPTAG::SPANN {
                 listElements += vectorNum;
                 auto compStart = std::chrono::high_resolution_clock::now();
                 for (int i = 0; i < vectorNum; i++) {//对pl里的每个向量进行处理
-                    char* vectorInfo = p_postingListFullData + i * m_vectorInfoSize;
+                    char* vectorInfo = p_postingListFullData + i * m_vectorInfoSize;//取出第i个向量的地址
                     int vectorID = *(reinterpret_cast<int*>(vectorInfo));//提取向量ID
 
 		            //SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "DEBUG: vectorID:%d\n", vectorID);
@@ -1791,7 +1791,7 @@ namespace SPTAG::SPANN {
                         continue;
                     }
                     auto distance2leaf = p_index->ComputeDistance(queryResults.GetQuantizedTarget(), vectorInfo + m_metaDataSize);//计算查询向量与磁盘原始向量之间的距离
-                    queryResults.AddPoint(vectorID, distance2leaf);//维护一个最小堆，保留最优的TopK个结果。
+                    queryResults.AddPoint(vectorID, distance2leaf);//保留最优的TopK个结果。
                 }
                 auto compEnd = std::chrono::high_resolution_clock::now();
                 if (realNum <= m_mergeThreshold) MergeAsync(p_index.get(), curPostingID); // TODO: Control merge

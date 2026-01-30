@@ -523,7 +523,7 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
 
     COMMON::QueryResultSet<T> *p_queryResults = (COMMON::QueryResultSet<T> *)&p_query;//存放的是内存Headindex的搜索结果。
 
-    auto workSpace = m_workSpaceFactory->GetWorkSpace();
+    auto workSpace = m_workSpaceFactory->GetWorkSpace();//
     if (!workSpace)
     {
         workSpace.reset(new ExtraWorkSpace());
@@ -539,18 +539,18 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
 
     float limitDist = p_queryResults->GetResult(0)->Dist * m_options.m_maxDistRatio;//如果某个Head里查询点太远，超过了ratio倍，就会抛弃
     int i = 0;
-    for (; i < m_options.m_searchInternalResultNum; ++i)
+    for (; i < m_options.m_searchInternalResultNum; ++i)//循环pl结果
     {
-        auto res = p_queryResults->GetResult(i);
+        auto res = p_queryResults->GetResult(i);//取第i个Head结果
         if (res->VID == -1 || (limitDist > 0.1 && res->Dist > limitDist))
             break;
-        if (m_extraSearcher->CheckValidPosting(res->VID))//如果res-vid存在于listInfo中，pl会被放入workspace，这些pl会被真正度读SSD
+        if (m_extraSearcher->CheckValidPosting(res->VID))//如果res-vid存在于listInfo中，pl会被放入workspace，这些pl会被真正度读SSD，这个postinglist里面是否存在向量
         {
             workSpace->m_postingIDs.emplace_back(res->VID);
         }
 
-        if (m_vectorTranslateMap.R() != 0)
-            res->VID = static_cast<SizeType>(*(m_vectorTranslateMap[res->VID]));
+        if (m_vectorTranslateMap.R() != 0)//plID映射转换
+            res->VID = static_cast<SizeType>(*(m_vectorTranslateMap[res->VID]));//res->vid就是原始ID了
         else
         {
             res->VID = -1;
@@ -563,7 +563,7 @@ template <typename T> ErrorCode Index<T>::SearchDiskIndex(QueryResult &p_query, 
         }
     }
 
-    for (; i < p_queryResults->GetResultNum(); ++i)
+    for (; i < p_queryResults->GetResultNum(); ++i)//收尾工作，将最终所有要用的plID转换成全局ID
     {
         auto res = p_queryResults->GetResult(i);
         if (res->VID == -1)
@@ -1171,7 +1171,7 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
                              (m_options.m_indexDirectory + FolderSep + m_options.m_headIDFile).c_str());
                 return ErrorCode::Fail;
             }
-            m_vectorTranslateMap.Load(ptr, m_index->m_iDataBlockSize, m_index->m_iDataCapacity);//桥梁
+            m_vectorTranslateMap.Load(ptr, m_index->m_iDataBlockSize, m_index->m_iDataCapacity);//ID映射表，把Headindex使用的局部ID翻译成Diskindex使用的全局ID。桥梁
         }
 
         if (m_options.m_buildSsdIndex)
@@ -1181,17 +1181,17 @@ template <typename T> ErrorCode Index<T>::BuildIndexInternal(std::shared_ptr<Hel
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Extrasearcher is not available and failed to initialize.\n");
                 return ErrorCode::Fail;
             }
-            if (!m_extraSearcher->BuildIndex(p_reader, m_index, m_options, m_versionMap, m_vectorTranslateMap))
+            if (!m_extraSearcher->BuildIndex(p_reader, m_index, m_options, m_versionMap, m_vectorTranslateMap))//把非Head向量写成pl，写到SSD里，同时构建vtmap的初始内容（Head向量还没指向SSD）
             {
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "BuildSSDIndex Failed!\n");
                 return ErrorCode::Fail;
             }
 
-            if (!m_options.m_excludehead)
+            if (!m_options.m_excludehead)//不排除Head向量，Head向量也要参与SSD索引
             {
                 std::uint64_t vid = (std::uint64_t)MaxSize;
-                for (int i = 0; i < m_vectorTranslateMap.R(); i++) {
-                    *(m_vectorTranslateMap[i]) = vid;
+                for (int i = 0; i < m_vectorTranslateMap.R(); i++) {//映射表，HeadID到全局ID
+                    *(m_vectorTranslateMap[i]) = vid;//把HeadID都设置成MaxSize含义，对应搜索时，说明这是Head-only向量，不需要去SSD查。
                 }
                 m_vectorTranslateMap.Save(m_options.m_indexDirectory + FolderSep + m_options.m_headIDFile);
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Include all vectors into SSD index...\n");

@@ -195,9 +195,9 @@ namespace SPTAG
                 m_extraFullGraphFile = p_opt.m_indexDirectory + FolderSep + p_opt.m_ssdIndex;
                 std::string curFile = m_extraFullGraphFile;
                 p_opt.m_searchPostingPageLimit = max(p_opt.m_searchPostingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * (p_opt.m_dim * sizeof(ValueType) + sizeof(int)) + PageSize - 1) / PageSize));//计算：加载一个pl最坏需要多少磁盘页
-                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Load index with posting page limit:%d\n", p_opt.m_searchPostingPageLimit);
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Load index with posting page limit:%d\n", p_opt.m_searchPostingPageLimit);//搜索时，读一个pl，最坏要读多少个Page
                 do {
-                    auto curIndexFile = f_createAsyncIO();
+                        auto curIndexFile = f_createAsyncIO();
                     if (curIndexFile == nullptr || !curIndexFile->Initialize(curFile.c_str(),
 #ifndef _MSC_VER
 #ifdef BATCH_READ
@@ -261,7 +261,7 @@ namespace SPTAG
                 QueryResult& p_queryResults,
                 std::shared_ptr<VectorIndex> p_index,
                 SearchStats* p_stats,
-                std::set<int>* truth, std::map<int, std::set<int>>* found)
+                std::set<int>* truth, std::map<int, std::set<int>>* found)//从SSD异步读取postinglist数据并计算最终的向量距离
             {
                 const uint32_t postingListCount = static_cast<uint32_t>(p_exWorkSpace->m_postingIDs.size());
 
@@ -594,11 +594,11 @@ namespace SPTAG
                 std::string postingListFullData("");
                 std::string vectors("");
                 std::string vectorIDs("");
-                size_t selectIdx = p_selections.lower_bound(postingListId);
+                size_t selectIdx = p_selections.lower_bound(postingListId);//该postinglist在Selection数组中的起始位置
                 // iterate over all the vectors in the posting list
                 for (int i = 0; i < p_postingListSize; ++i)
                 {
-                    if (p_selections[selectIdx].node != postingListId)
+                    if (p_selections[selectIdx].node != postingListId)//检查Selection是否匹配
                     {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Selection ID NOT MATCH! node:%d offset:%zu\n", postingListId, selectIdx);
                         throw std::runtime_error("Selection ID mismatch");
@@ -610,7 +610,7 @@ namespace SPTAG
                     vectorID.append(reinterpret_cast<char *>(&vid), sizeof(int));
 
                     ValueType *p_vector = reinterpret_cast<ValueType *>(p_fullVectors->GetVector(vid));
-                    if (p_enableDeltaEncoding)
+                    if (p_enableDeltaEncoding)//跳过
                     {
                         DimensionType n = p_fullVectors->Dimension();
                         std::vector<ValueType> p_vector_delta(n);
@@ -625,7 +625,7 @@ namespace SPTAG
                         vector.append(reinterpret_cast<char *>(p_vector), p_fullVectors->PerVectorDataSize());
                     }
 
-                    if (p_enablePostingListRearrange)
+                    if (p_enablePostingListRearrange)//跳过
                     {
                         vectorIDs += vectorID;
                         vectors += vector;
@@ -780,9 +780,9 @@ namespace SPTAG
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Time to sort selections:%.2lf sec.\n", ((double)std::chrono::duration_cast<std::chrono::seconds>(t3 - t2).count()) + ((double)std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()) / 1000);
 
                 int postingSizeLimit = INT_MAX;
-                if (p_opt.m_postingPageLimit > 0)
+                if (p_opt.m_postingPageLimit > 0)//人为定义postingPageLimit=3，只允许postinglist存放3个页面。
                 {
-                    p_opt.m_postingPageLimit = max(p_opt.m_postingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * vectorInfoSize + PageSize - 1) / PageSize));
+                    p_opt.m_postingPageLimit = max(p_opt.m_postingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * vectorInfoSize + PageSize - 1) / PageSize));//m_postingVectorLimit=118，人为设定最少保留的向量个数
                     p_opt.m_searchPostingPageLimit = p_opt.m_postingPageLimit;
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Build index with posting page limit:%d\n", p_opt.m_postingPageLimit);
                     postingSizeLimit = static_cast<int>(p_opt.m_postingPageLimit * PageSize / vectorInfoSize);
@@ -827,10 +827,10 @@ namespace SPTAG
 
                                     for (size_t dropID = postingSizeLimit; dropID < postingListSize[i]; ++dropID)
                                     {
-                                        int tonode = selections.m_selections[selectIdx + dropID].tonode;
+                                        int tonode = selections.m_selections[selectIdx + dropID].tonode;//取出被丢弃向量的向量ID
                                         --replicaCount[tonode];
                                     }
-                                    postingListSize[i] = postingSizeLimit;
+                                    postingListSize[i] = postingSizeLimit;//postinglist截断
                                 }
                                 else
                                 {
@@ -880,7 +880,7 @@ namespace SPTAG
                 SPTAGLIB_LOG(SPTAG::Helper::LogLevel::LL_Info, "Time to perform posting cut:%.2lf sec.\n", ((double)std::chrono::duration_cast<std::chrono::seconds>(t4 - t3).count()) + ((double)std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count()) / 1000);
 
                 // number of posting lists per file
-                size_t postingFileSize = (postingListSize.size() + p_opt.m_ssdIndexFileNum - 1) / p_opt.m_ssdIndexFileNum;//Head总数/要生成几个SSD索引文件=每个SSD文件负责多少个Head（向上取整）
+                size_t postingFileSize = (postingListSize.size() + p_opt.m_ssdIndexFileNum - 1) / p_opt.m_ssdIndexFileNum;//Head总数/要生成几个SSD索引文件=每个SSD文件负责多少个Head（向上取整）,默认是一个。
                 std::vector<size_t> selectionsBatchOffset(p_opt.m_ssdIndexFileNum + 1, 0);//第i个SSD索引文件在Selection中对应的起始位置
                 for (int i = 0; i < p_opt.m_ssdIndexFileNum; i++) {
                     size_t curPostingListEnd = min(postingListSize.size(), (i + 1) * postingFileSize);
@@ -1025,7 +1025,7 @@ namespace SPTAG
                     std::unique_ptr<int[]> postPageNum;
                     std::unique_ptr<std::uint16_t[]> postPageOffset;
                     std::vector<int> postingOrderInIndex;
-                    SelectPostingOffset(curPostingListBytes, postPageNum, postPageOffset, postingOrderInIndex);
+                    SelectPostingOffset(curPostingListBytes, postPageNum, postPageOffset, postingOrderInIndex);//构建SSD索引时，用来计算每个pl在SSD文件上的物理布局位置。
 
                     OutputSSDIndexFile((i == 0) ? outputFile : outputFile + "_" + std::to_string(i),
                         p_opt.m_enableDeltaEncoding,
@@ -1535,7 +1535,7 @@ namespace SPTAG
                         pageOffset = static_cast<std::uint16_t>(p_postPageOffset[i]);
                         listEleCount = static_cast<int>(p_postingListSizes[i]);
                         postingListByte = p_postingListBytes[i];
-                        listPageCount = static_cast<std::uint16_t>(postingListByte / PageSize);
+                        listPageCount = static_cast<std::uint16_t>(postingListByte / PageSize);//跨页的数量
                         if (0 != (postingListByte % PageSize))
                         {
                             ++listPageCount;

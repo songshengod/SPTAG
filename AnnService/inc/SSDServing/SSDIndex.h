@@ -186,25 +186,25 @@ namespace SPTAG {
                 {
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start loading warmup query set...\n");
                     std::shared_ptr<Helper::ReaderOptions> queryOptions(new Helper::ReaderOptions(p_opts.m_valueType, p_opts.m_dim, p_opts.m_warmupType, p_opts.m_warmupDelimiter));
-                    auto queryReader = Helper::VectorSetReader::CreateInstance(queryOptions);
+                    auto queryReader = Helper::VectorSetReader::CreateInstance(queryOptions);//创建读取器实例
                     if (ErrorCode::Success != (ret = queryReader->LoadFile(p_opts.m_warmupPath)))
                     {
                         SPTAGLIB_LOG(Helper::LogLevel::LL_Error, "Failed to read query file.\n");
                         return ret;
                     }
-                    auto warmupQuerySet = queryReader->GetVectorSet();
-                    int warmupNumQueries = warmupQuerySet->Count();
+                    auto warmupQuerySet = queryReader->GetVectorSet();//获取加载好的向量集合
+                    int warmupNumQueries = warmupQuerySet->Count();//获取预热查询的数量
 
-                    std::vector<QueryResult> warmupResults(warmupNumQueries, QueryResult(NULL, max(K, internalResultNum), false));
-                    std::vector<SPANN::SearchStats> warmpUpStats(warmupNumQueries);
+                    std::vector<QueryResult> warmupResults(warmupNumQueries, QueryResult(NULL, max(K, internalResultNum), false));//为每个预热查询分配结果空间
+                    std::vector<SPANN::SearchStats> warmpUpStats(warmupNumQueries);//用于记录搜索过程中的统计数据
                     for (int i = 0; i < warmupNumQueries; ++i)
                     {
-                        (*((COMMON::QueryResultSet<ValueType>*)&warmupResults[i])).SetTarget(reinterpret_cast<ValueType*>(warmupQuerySet->GetVector(i)), p_index->m_pQuantizer);
-                        warmupResults[i].Reset();
+                        (*((COMMON::QueryResultSet<ValueType>*)&warmupResults[i])).SetTarget(reinterpret_cast<ValueType*>(warmupQuerySet->GetVector(i)), p_index->m_pQuantizer);//将预热集中的第i个向量作为搜索目标
+                        warmupResults[i].Reset();//重置结果集状态
                     }
 
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Start warmup...\n");
-                    SearchSequential(p_index, numThreads, warmupResults, warmpUpStats, p_opts.m_queryCountLimit, internalResultNum);//预热搜索，会产生真实的io，操作系统将索引加载到cache中。
+                    SearchSequential(p_index, numThreads, warmupResults, warmpUpStats, p_opts.m_queryCountLimit, internalResultNum);//预热搜索，会产生真实的io，操作系统将索引加载到缓冲中。
                     SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "\nFinish warmup...\n");
                 }
 

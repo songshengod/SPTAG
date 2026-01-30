@@ -613,7 +613,7 @@ break;
                         if (item.last - item.first <= m_iBKTLeafSize) {
                             for (SizeType j = item.first; j < item.last; j++) {
                                 SizeType cid = (reverseIndices == nullptr)? localindices[j]: reverseIndices->at(localindices[j]);//cid是真实向量ID。1->lo[j]是当前区间的向量ID，2->lo里面是索引在子集的位置，需要映射会原始的ID
-                                m_pTreeRoots.emplace_back(cid);//把每个向量作为叶子结点加入树
+                                m_pTreeRoots.emplace_back(cid);
                             }
                         }
                         else { // clustering the data into BKTKmeansK clusters
