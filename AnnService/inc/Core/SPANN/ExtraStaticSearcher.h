@@ -703,7 +703,7 @@ namespace SPTAG
                         auto fullVectors = p_reader->GetVectorSet(start, end);//获取当前批次
                         if (p_opt.m_distCalcMethod == DistCalcMethod::Cosine && !p_reader->IsNormalized() && !p_headIndex->m_pQuantizer) fullVectors->Normalize(p_opt.m_iSSDNumberOfThreads);
 
-                        if (p_opt.m_batches > 1) {
+                        if (p_opt.m_ batches > 1) {
                             if (selections.LoadBatch(static_cast<size_t>(start) * p_opt.m_replicaCount, static_cast<size_t>(end) * p_opt.m_replicaCount) != ErrorCode::Success)
                             {
                                 return false;
@@ -772,7 +772,7 @@ namespace SPTAG
                         return false;
                     }
                 }
-
+  
                 // Sort results either in CPU or GPU
                 VectorIndex::SortSelections(&selections.m_selections);//按照HeadID来排序
 

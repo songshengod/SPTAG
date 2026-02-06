@@ -1160,7 +1160,7 @@ void VectorIndex::ApproximateRNG(std::shared_ptr<VectorSet> &fullVectors, std::u
 
             while (true)
             {
-                int fullID = nextFullID.fetch_add(1);
+                int fullID = nextFullID.fetch_add(1);//
                 if (fullID >= fullVectors->Count())
                 {
                     break;
@@ -1204,7 +1204,7 @@ void VectorIndex::ApproximateRNG(std::shared_ptr<VectorSet> &fullVectors, std::u
 
                 BasicResult *queryResults = resultSet.GetResults();//获取搜索到的候选集
                 int currReplicaCount = 0;
-                for (int i = 0; i < candidateNum && currReplicaCount < replicaCount; ++i)
+                for (int i = 0; i < candidateNum && currReplicaCount < replicaCount; ++i)//遍历HeadID
                 {
                     if (queryResults[i].VID == -1)
                     {

@@ -1765,8 +1765,8 @@ namespace SPTAG::SPANN {
             const auto postingListCount = static_cast<uint32_t>(p_exWorkSpace->m_postingIDs.size());
             for (uint32_t pi = 0; pi < postingListCount; ++pi) {
                 auto curPostingID = p_exWorkSpace->m_postingIDs[pi];
-                auto& buffer = (p_exWorkSpace->m_pageBuffers[pi]);
-                char* p_postingListFullData = (char*)(buffer.GetBuffer());
+                auto& buffer = (p_exWorkSpace->m_pageBuffers[pi]);//该pl对应的磁盘页缓存
+                char* p_postingListFullData = (char*)(buffer.GetBuffer());//取到原始连续内存首地址
                 int vectorNum = (int)(buffer.GetAvailableSize() / m_vectorInfoSize);//通过将总大小除以单个向量，程序计算出内存里包含多少个向量
 
                 diskIO += ((buffer.GetAvailableSize() + PageSize - 1) >> PageSizeEx);
@@ -1782,7 +1782,7 @@ namespace SPTAG::SPANN {
 
 		            //SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "DEBUG: vectorID:%d\n", vectorID);
                     if (m_versionMap->Deleted(vectorID)) {
-                        realNum--;
+                        realNum--;  
                         listElements--;
                         continue;
                     }
